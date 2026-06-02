@@ -1,12 +1,12 @@
+use ico::{IconDir, IconDirEntry, IconImage, ResourceType};
+use image::{ImageBuffer, ImageFormat, Rgba};
+use resvg::tiny_skia;
+use resvg::usvg;
 use std::fs;
 use std::io::Cursor;
-use resvg::usvg;
-use resvg::tiny_skia;
-use image::{ImageBuffer, Rgba, ImageFormat};
-use ico::{IconDir, IconDirEntry, IconImage, ResourceType};
 
+use crate::converter::{ConversionResult, ConvertOptions, Converter, Format, OutputFileMetadata};
 use crate::error::MartiniError;
-use crate::converter::{Converter, ConvertOptions, ConversionResult, OutputFileMetadata, Format};
 
 pub struct SvgToFaviconConverter;
 
@@ -29,11 +29,31 @@ impl Converter for SvgToFaviconConverter {
 
             // Render PNG sizes
             let sizes = [
-                (16, "favicon-16x16.png", "Standard small favicon for browser tabs"),
-                (32, "favicon-32x32.png", "Standard medium favicon for desktop browsers"),
-                (180, "apple-touch-icon.png", "Apple Touch Icon for iOS home screen"),
-                (192, "android-chrome-192x192.png", "Android Chrome icon for web app manifest"),
-                (512, "android-chrome-512x512.png", "Android Chrome splash icon for web app manifest"),
+                (
+                    16,
+                    "favicon-16x16.png",
+                    "Standard small favicon for browser tabs",
+                ),
+                (
+                    32,
+                    "favicon-32x32.png",
+                    "Standard medium favicon for desktop browsers",
+                ),
+                (
+                    180,
+                    "apple-touch-icon.png",
+                    "Apple Touch Icon for iOS home screen",
+                ),
+                (
+                    192,
+                    "android-chrome-192x192.png",
+                    "Android Chrome icon for web app manifest",
+                ),
+                (
+                    512,
+                    "android-chrome-512x512.png",
+                    "Android Chrome splash icon for web app manifest",
+                ),
             ];
 
             let mut png_buffers = Vec::new();
@@ -116,7 +136,6 @@ impl Converter for SvgToFaviconConverter {
                 size_bytes: html_content.len() as u64,
                 description: "HTML header tags to copy-paste into index.html".to_string(),
             });
-
         } else {
             // Single ICO file output
             let sizes = [16, 32, 48];
@@ -155,12 +174,16 @@ impl Converter for SvgToFaviconConverter {
 
 /// Renders SVG to straight RGBA pixels at a specific size, preserving aspect ratio.
 fn render_to_rgba(tree: &usvg::Tree, width: u32, height: u32) -> Result<Vec<u8>, MartiniError> {
-    let mut pixmap = tiny_skia::Pixmap::new(width, height)
-        .ok_or_else(|| MartiniError::Rendering(format!("Failed to create tiny-skia Pixmap of size {}x{}", width, height)))?;
+    let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or_else(|| {
+        MartiniError::Rendering(format!(
+            "Failed to create tiny-skia Pixmap of size {}x{}",
+            width, height
+        ))
+    })?;
 
     let svg_w = tree.size().width();
     let svg_h = tree.size().height();
-    
+
     // Choose scaling factor to fit image in target dimensions
     let scale = (width as f32 / svg_w).min(height as f32 / svg_h);
     let dx = (width as f32 - (svg_w * scale)) / 2.0;
@@ -197,9 +220,10 @@ fn demultiply_alpha(data: &[u8]) -> Vec<u8> {
 
 /// Converts a straight RGBA raw pixel buffer into PNG bytes.
 fn rgba_to_png(rgba: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>, MartiniError> {
-    let img = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, rgba)
-        .ok_or_else(|| MartiniError::Rendering("Failed to create ImageBuffer from raw pixels".to_string()))?;
-        
+    let img = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, rgba).ok_or_else(|| {
+        MartiniError::Rendering("Failed to create ImageBuffer from raw pixels".to_string())
+    })?;
+
     let mut png_bytes = Vec::new();
     let mut cursor = Cursor::new(&mut png_bytes);
     img.write_to(&mut cursor, ImageFormat::Png)?;

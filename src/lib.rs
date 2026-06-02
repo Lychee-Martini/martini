@@ -1,6 +1,6 @@
-pub mod error;
-pub mod converter;
 pub mod cli;
+pub mod converter;
+pub mod error;
 
+pub use converter::{ConversionResult, ConvertOptions, Format, OutputFileMetadata, convert};
 pub use error::MartiniError;
-pub use converter::{convert, Format, ConvertOptions, ConversionResult, OutputFileMetadata};

@@ -15,7 +15,8 @@ fn test_list_formats() {
 #[test]
 fn test_list_formats_json() {
     let mut cmd = Command::cargo_bin("martini").unwrap();
-    cmd.arg("list-formats").arg("--json")
+    cmd.arg("list-formats")
+        .arg("--json")
         .assert()
         .success()
         .stdout(predicate::str::contains("\"from\": \"svg\""));
@@ -28,10 +29,14 @@ fn test_convert_svg_to_ico() {
 
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--from").arg("svg")
-        .arg("--to").arg("favicon")
-        .arg("-i").arg("tests/fixtures/sample.svg")
-        .arg("-o").arg(&output_path)
+        .arg("--from")
+        .arg("svg")
+        .arg("--to")
+        .arg("favicon")
+        .arg("-i")
+        .arg("tests/fixtures/sample.svg")
+        .arg("-o")
+        .arg(&output_path)
         .assert()
         .success();
 
@@ -47,10 +52,14 @@ fn test_convert_svg_to_package() {
 
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--from").arg("svg")
-        .arg("--to").arg("favicon")
-        .arg("-i").arg("tests/fixtures/sample.svg")
-        .arg("-o").arg(&output_dir)
+        .arg("--from")
+        .arg("svg")
+        .arg("--to")
+        .arg("favicon")
+        .arg("-i")
+        .arg("tests/fixtures/sample.svg")
+        .arg("-o")
+        .arg(&output_dir)
         .arg("--package")
         .assert()
         .success();
@@ -67,10 +76,14 @@ fn test_convert_svg_to_package() {
 fn test_convert_missing_input() {
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--from").arg("svg")
-        .arg("--to").arg("favicon")
-        .arg("-i").arg("tests/fixtures/does_not_exist.svg")
-        .arg("-o").arg("target/ignored.ico")
+        .arg("--from")
+        .arg("svg")
+        .arg("--to")
+        .arg("favicon")
+        .arg("-i")
+        .arg("tests/fixtures/does_not_exist.svg")
+        .arg("-o")
+        .arg("target/ignored.ico")
         .assert()
         .code(2) // InputFileNotFound exit code
         .stderr(predicate::str::contains("Input file not found"));
@@ -80,10 +93,14 @@ fn test_convert_missing_input() {
 fn test_convert_unsupported_formats() {
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--from").arg("png")
-        .arg("--to").arg("pdf")
-        .arg("-i").arg("tests/fixtures/sample.svg")
-        .arg("-o").arg("target/ignored.ico")
+        .arg("--from")
+        .arg("png")
+        .arg("--to")
+        .arg("pdf")
+        .arg("-i")
+        .arg("tests/fixtures/sample.svg")
+        .arg("-o")
+        .arg("target/ignored.ico")
         .assert()
         .code(6) // UnsupportedConversion exit code
         .stderr(predicate::str::contains("Unsupported conversion"));

@@ -1,7 +1,7 @@
+use clap::Parser;
 use std::process;
 use std::str::FromStr;
-use clap::Parser;
-use tracing::{debug, info, Level};
+use tracing::{Level, debug, info};
 use tracing_subscriber::FmtSubscriber;
 
 use martini::cli::{CliArgs, Commands};
@@ -52,22 +52,22 @@ fn main() {
 fn run(args: CliArgs) -> Result<i32, MartiniError> {
     match args.command {
         Commands::ListFormats => {
-            let formats = vec![
-                serde_json::json!({
-                    "from": "svg",
-                    "to": "favicon",
-                    "description": "Convert an SVG vector image to a Chrome favicon (.ico or full favicon package)",
-                    "parameters": {
-                        "package": "boolean (generates a package of optimized PNGs, manifest, and HTML copy-paste snippets alongside the .ico file)"
-                    }
-                })
-            ];
+            let formats = vec![serde_json::json!({
+                "from": "svg",
+                "to": "favicon",
+                "description": "Convert an SVG vector image to a Chrome favicon (.ico or full favicon package)",
+                "parameters": {
+                    "package": "boolean (generates a package of optimized PNGs, manifest, and HTML copy-paste snippets alongside the .ico file)"
+                }
+            })];
 
             if args.json {
                 println!("{}", serde_json::to_string_pretty(&formats).unwrap());
             } else {
                 println!("Supported Conversions:");
-                println!("- svg -> favicon: Convert SVG to Chrome favicon (single .ico or package). Options: --package");
+                println!(
+                    "- svg -> favicon: Convert SVG to Chrome favicon (single .ico or package). Options: --package"
+                );
             }
             Ok(0)
         }
@@ -78,18 +78,16 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             output,
             package,
         } => {
-            let from_fmt = Format::from_str(&from).map_err(|_| {
-                MartiniError::UnsupportedConversion {
+            let from_fmt =
+                Format::from_str(&from).map_err(|_| MartiniError::UnsupportedConversion {
                     from: from.clone(),
                     to: to.clone(),
-                }
-            })?;
-            let to_fmt = Format::from_str(&to).map_err(|_| {
-                MartiniError::UnsupportedConversion {
+                })?;
+            let to_fmt =
+                Format::from_str(&to).map_err(|_| MartiniError::UnsupportedConversion {
                     from: from.clone(),
                     to: to.clone(),
-                }
-            })?;
+                })?;
 
             debug!("Reading input file: {:?}", input);
             if !input.exists() {

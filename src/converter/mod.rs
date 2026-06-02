@@ -1,6 +1,6 @@
+use crate::error::MartiniError;
 use std::path::PathBuf;
 use std::str::FromStr;
-use crate::error::MartiniError;
 
 pub mod svg2favicon;
 
