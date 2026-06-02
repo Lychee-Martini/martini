@@ -1,7 +1,6 @@
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use rayon::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process;
 use std::str::FromStr;
 use tracing::{Level, info};
@@ -10,6 +9,22 @@ use tracing_subscriber::FmtSubscriber;
 use martini::cli::{CliArgs, Commands};
 use martini::converter::{self, ConversionResult, ConvertOptions, Format, OutputFileMetadata};
 use martini::error::MartiniError;
+use martini::{BatchConvertOptions, ProgressTracker, TaskResult, batch_convert};
+use std::sync::Arc;
+
+struct CliProgressTracker {
+    pb: ProgressBar,
+}
+
+impl ProgressTracker for CliProgressTracker {
+    fn set_message(&self, msg: &str) {
+        self.pb.set_message(msg.to_string());
+    }
+
+    fn inc(&self, delta: u64) {
+        self.pb.inc(delta);
+    }
+}
 
 fn main() {
     let args = CliArgs::parse();
@@ -251,7 +266,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     println!("🔍 Scanning for images...");
                 }
 
-                let files = get_all_images(&input, recursive, &from);
+                let files = martini::converter::batch::get_all_images(&input, recursive, &from);
                 if files.is_empty() {
                     if args.json {
                         println!("[]");
@@ -265,33 +280,10 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     println!("✨ Found {} images to process.\n", files.len());
                 }
 
-                // Create tasks list
-                let mut tasks = Vec::new();
-                for file_path in &files {
-                    for target_fmt in &targets {
-                        // Output path resolution
-                        let out_path = match &output {
-                            Some(out_dir) => {
-                                let relative = file_path.strip_prefix(&input).map_err(|_| {
-                                    MartiniError::InvalidInputData {
-                                        reason: format!(
-                                            "File path {:?} does not start with input directory {:?}",
-                                            file_path, input
-                                        ),
-                                    }
-                                })?;
-                                out_dir
-                                    .join(relative)
-                                    .with_extension(target_fmt.to_string())
-                            }
-                            None => file_path.with_extension(target_fmt.to_string()),
-                        };
-                        tasks.push((file_path.clone(), *target_fmt, out_path));
-                    }
-                }
+                let total_tasks = files.len() * targets.len();
 
                 let pb = if !args.json && !args.quiet {
-                    let pb = ProgressBar::new(tasks.len() as u64);
+                    let pb = ProgressBar::new(total_tasks as u64);
                     pb.set_style(
                         ProgressStyle::default_bar()
                             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
@@ -303,165 +295,41 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     ProgressBar::hidden()
                 };
 
-                // Track results in parallel
-                let results: Vec<TaskResult> = tasks
-                    .par_iter()
-                    .map(|(img_path, target_fmt, out_path)| {
-                        let name_str = img_path
-                            .file_name()
-                            .map(|n| n.to_string_lossy())
-                            .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
-                        pb.set_message(format!("Converting {}", name_str));
+                let tracker = Arc::new(CliProgressTracker { pb: pb.clone() });
 
-                        let orig_size = img_path.metadata().map(|m| m.len()).unwrap_or(0);
+                let batch_options = BatchConvertOptions {
+                    input_dir: input.clone(),
+                    output_dir: output.clone(),
+                    from_filter: from.clone(),
+                    targets: targets.clone(),
+                    quality,
+                    lossless,
+                    recursive,
+                    overwrite,
+                    delete_original,
+                    workers,
+                };
 
-                        // If not overwrite and output exists, skip
-                        if out_path.exists() && !overwrite {
-                            pb.inc(1);
-                            return TaskResult {
-                                input_path: img_path.to_string_lossy().to_string(),
-                                output_path: Some(out_path.to_string_lossy().to_string()),
-                                status: "skipped".to_string(),
-                                original_size: orig_size,
-                                converted_size: out_path.metadata().map(|m| m.len()).unwrap_or(0),
-                                error_message: None,
-                            };
-                        }
-
-                        // Determine source format by extension
-                        let file_ext = img_path
-                            .extension()
-                            .and_then(|e| e.to_str())
-                            .unwrap_or("")
-                            .to_lowercase();
-                        let file_from_fmt = match Format::from_str(&file_ext) {
-                            Ok(fmt) => fmt,
-                            Err(_) => {
-                                pb.inc(1);
-                                return TaskResult {
-                                    input_path: img_path.to_string_lossy().to_string(),
-                                    output_path: None,
-                                    status: "failed".to_string(),
-                                    original_size: orig_size,
-                                    converted_size: 0,
-                                    error_message: Some(format!(
-                                        "Unsupported source file extension: {}",
-                                        file_ext
-                                    )),
-                                };
-                            }
-                        };
-
-                        let options = ConvertOptions {
-                            input_path: img_path.clone(),
-                            output_path: out_path.clone(),
-                            package: false,
-                            quality,
-                            lossless,
-                            overwrite,
-                        };
-
-                        // Perform conversion
-                        let input_data = match std::fs::read(img_path) {
-                            Ok(d) => d,
-                            Err(e) => {
-                                pb.inc(1);
-                                return TaskResult {
-                                    input_path: img_path.to_string_lossy().to_string(),
-                                    output_path: None,
-                                    status: "failed".to_string(),
-                                    original_size: orig_size,
-                                    converted_size: 0,
-                                    error_message: Some(format!(
-                                        "Failed to read input file: {}",
-                                        e
-                                    )),
-                                };
-                            }
-                        };
-                        if let Err(e) =
-                            converter::convert(file_from_fmt, *target_fmt, &input_data, &options)
-                        {
-                            pb.inc(1);
-                            return TaskResult {
-                                input_path: img_path.to_string_lossy().to_string(),
-                                output_path: Some(out_path.to_string_lossy().to_string()),
-                                status: "failed".to_string(),
-                                original_size: orig_size,
-                                converted_size: 0,
-                                error_message: Some(e.to_string()),
-                            };
-                        }
-
-                        let new_size = out_path.metadata().map(|m| m.len()).unwrap_or(0);
-
-                        pb.inc(1);
-                        TaskResult {
-                            input_path: img_path.to_string_lossy().to_string(),
-                            output_path: Some(out_path.to_string_lossy().to_string()),
-                            status: "success".to_string(),
-                            original_size: orig_size,
-                            converted_size: new_size,
-                            error_message: None,
-                        }
-                    })
-                    .collect();
+                let batch_result = batch_convert(batch_options, Some(tracker))?;
 
                 pb.finish_and_clear();
 
-                // Group successes/failures per input file for deletion safety
-                let mut conversion_successes = std::collections::HashMap::new();
-                let mut conversion_failures = std::collections::HashMap::new();
-                for res in &results {
-                    if res.status == "success" || res.status == "skipped" {
-                        conversion_successes
-                            .entry(res.input_path.clone())
-                            .or_insert_with(std::collections::HashSet::new)
-                            .insert(res.output_path.clone().unwrap_or_default());
-                    } else {
-                        conversion_failures
-                            .entry(res.input_path.clone())
-                            .or_insert_with(std::collections::HashSet::new)
-                            .insert(res.error_message.clone().unwrap_or_default());
-                    }
-                }
-
-                // Handle delete original
-                let mut deleted_count = 0;
-                let mut del_errors = Vec::new();
-                if delete_original {
-                    for file_path in &files {
-                        let path_str = file_path.to_string_lossy().to_string();
-                        let successes = conversion_successes
-                            .get(&path_str)
-                            .map(|s| s.len())
-                            .unwrap_or(0);
-                        let failures = conversion_failures
-                            .get(&path_str)
-                            .map(|f| f.len())
-                            .unwrap_or(0);
-
-                        // Did we successfully convert to all requested targets, with no failures?
-                        if successes == targets.len() && failures == 0 {
-                            if let Err(e) = std::fs::remove_file(file_path) {
-                                del_errors.push((path_str, e.to_string()));
-                            } else {
-                                deleted_count += 1;
-                            }
-                        }
-                    }
-                }
-
-                // Reporting
                 if args.json {
-                    println!("{}", serde_json::to_string_pretty(&results).unwrap());
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&batch_result.tasks).unwrap()
+                    );
                 } else {
-                    print_report_table(&results, delete_original, deleted_count, &del_errors);
+                    print_report_table(
+                        &batch_result.tasks,
+                        delete_original,
+                        batch_result.deleted_count,
+                        &batch_result.deletion_errors,
+                    );
                 }
 
-                // If any tasks failed, exit with non-zero code
-                let any_failed =
-                    results.iter().any(|r| r.status == "failed") || !del_errors.is_empty();
+                let any_failed = batch_result.tasks.iter().any(|r| r.status == "failed")
+                    || !batch_result.deletion_errors.is_empty();
                 if any_failed { Ok(1) } else { Ok(0) }
             } else {
                 // Single file conversion
@@ -581,57 +449,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-struct TaskResult {
-    input_path: String,
-    output_path: Option<String>,
-    status: String, // "success", "skipped", "failed"
-    original_size: u64,
-    converted_size: u64,
-    error_message: Option<String>,
-}
-
-fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> Vec<PathBuf> {
-    let mut image_files = Vec::new();
-    let extensions: std::collections::HashSet<&str> = match from_filter.to_lowercase().as_str() {
-        "png" => ["png"].iter().copied().collect(),
-        "jpg" | "jpeg" => ["jpg", "jpeg"].iter().copied().collect(),
-        "webp" => ["webp"].iter().copied().collect(),
-        "avif" => ["avif"].iter().copied().collect(),
-        _ => ["png", "jpg", "jpeg"].iter().copied().collect(), // default/auto
-    };
-
-    let mut dirs_to_visit = vec![directory.to_path_buf()];
-
-    while let Some(dir) = dirs_to_visit.pop() {
-        if let Ok(entries) = std::fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-
-                if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                    && name.starts_with('.')
-                    && name != "."
-                {
-                    continue;
-                }
-
-                if path.is_dir() {
-                    if recursive {
-                        dirs_to_visit.push(path);
-                    }
-                } else if path.is_file()
-                    && let Some(ext) = path.extension().and_then(|e| e.to_str())
-                    && extensions.contains(ext.to_lowercase().as_str())
-                {
-                    image_files.push(path);
-                }
-            }
-        }
-    }
-
-    image_files.sort();
-    image_files
-}
+// Local TaskResult and get_all_images removed (moved to library)
 
 fn format_size(size_bytes: u64) -> String {
     if size_bytes == 0 {

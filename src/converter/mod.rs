@@ -2,7 +2,15 @@ use crate::error::MartiniError;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+pub mod batch;
 pub mod image_conv;
+
+#[derive(Debug, Clone)]
+pub struct EncodedFile {
+    pub path: PathBuf,
+    pub bytes: Vec<u8>,
+    pub description: String,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]

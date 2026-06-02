@@ -6,7 +6,9 @@ use resvg::usvg;
 use std::fs;
 use std::io::Cursor;
 
-use crate::converter::{ConversionResult, ConvertOptions, Converter, Format, OutputFileMetadata};
+use crate::converter::{
+    ConversionResult, ConvertOptions, Converter, EncodedFile, Format, OutputFileMetadata,
+};
 use crate::error::MartiniError;
 
 pub struct ImageConverter;
@@ -46,7 +48,9 @@ impl ImageConverter {
         };
 
         // 2. Perform color format standardisation for raster outputs if needed
-        if to != Format::Favicon && let Some(ref img) = target_img {
+        if to != Format::Favicon
+            && let Some(ref img) = target_img
+        {
             let color_type = img.color();
             let converted = match color_type {
                 ColorType::La8 | ColorType::La16 | ColorType::Rgba8 | ColorType::Rgba16 => {
@@ -72,7 +76,27 @@ impl ImageConverter {
             }
         };
 
-        encoder.encode(from, to, tree.as_ref(), target_img.as_ref(), options)
+        let encoded_files =
+            encoder.encode(from, to, tree.as_ref(), target_img.as_ref(), options)?;
+
+        let mut output_files = Vec::new();
+        for file in encoded_files {
+            if let Some(parent) = file.path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&file.path, &file.bytes)?;
+            output_files.push(OutputFileMetadata {
+                path: file.path.to_string_lossy().to_string(),
+                size_bytes: file.bytes.len() as u64,
+                description: file.description,
+            });
+        }
+
+        Ok(ConversionResult {
+            from,
+            to,
+            output_files,
+        })
     }
 }
 
@@ -98,10 +122,10 @@ pub trait Encoder {
         tree: Option<&usvg::Tree>,
         img: Option<&DynamicImage>,
         options: &ConvertOptions,
-    ) -> Result<ConversionResult, MartiniError>;
+    ) -> Result<Vec<EncodedFile>, MartiniError>;
 }
 
-struct WebpEncoder;
+pub(crate) struct WebpEncoder;
 impl Encoder for WebpEncoder {
     fn encode(
         &self,
@@ -110,7 +134,7 @@ impl Encoder for WebpEncoder {
         _tree: Option<&usvg::Tree>,
         img: Option<&DynamicImage>,
         options: &ConvertOptions,
-    ) -> Result<ConversionResult, MartiniError> {
+    ) -> Result<Vec<EncodedFile>, MartiniError> {
         let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
             reason: "Failed to decode/render input image".to_string(),
         })?;
@@ -123,12 +147,21 @@ impl Encoder for WebpEncoder {
         } else {
             webp_encoder.encode(options.quality as f32)
         };
-        
-        write_single_file(from, to, &webp_data, options)
+
+        let bytes = webp_data.to_vec();
+        let description = format!(
+            "Converted image from {} to {} (quality: {}, lossless: {})",
+            from, to, options.quality, options.lossless
+        );
+        Ok(vec![EncodedFile {
+            path: options.output_path.clone(),
+            bytes,
+            description,
+        }])
     }
 }
 
-struct AvifEncoder;
+pub(crate) struct AvifEncoder;
 impl Encoder for AvifEncoder {
     fn encode(
         &self,
@@ -137,17 +170,25 @@ impl Encoder for AvifEncoder {
         _tree: Option<&usvg::Tree>,
         img: Option<&DynamicImage>,
         options: &ConvertOptions,
-    ) -> Result<ConversionResult, MartiniError> {
+    ) -> Result<Vec<EncodedFile>, MartiniError> {
         let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
             reason: "Failed to decode/render input image".to_string(),
         })?;
 
         let avif_bytes = encode_avif(target_img, options.quality, options.lossless)?;
-        write_single_file(from, to, &avif_bytes, options)
+        let description = format!(
+            "Converted image from {} to {} (quality: {}, lossless: {})",
+            from, to, options.quality, options.lossless
+        );
+        Ok(vec![EncodedFile {
+            path: options.output_path.clone(),
+            bytes: avif_bytes,
+            description,
+        }])
     }
 }
 
-struct PngEncoder;
+pub(crate) struct PngEncoder;
 impl Encoder for PngEncoder {
     fn encode(
         &self,
@@ -156,7 +197,7 @@ impl Encoder for PngEncoder {
         _tree: Option<&usvg::Tree>,
         img: Option<&DynamicImage>,
         options: &ConvertOptions,
-    ) -> Result<ConversionResult, MartiniError> {
+    ) -> Result<Vec<EncodedFile>, MartiniError> {
         let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
             reason: "Failed to decode/render input image".to_string(),
         })?;
@@ -164,12 +205,20 @@ impl Encoder for PngEncoder {
         let mut png_bytes = Vec::new();
         let mut cursor = Cursor::new(&mut png_bytes);
         target_img.write_to(&mut cursor, ImageFormat::Png)?;
-        
-        write_single_file(from, to, &png_bytes, options)
+
+        let description = format!(
+            "Converted image from {} to {} (quality: {}, lossless: {})",
+            from, to, options.quality, options.lossless
+        );
+        Ok(vec![EncodedFile {
+            path: options.output_path.clone(),
+            bytes: png_bytes,
+            description,
+        }])
     }
 }
 
-struct JpegEncoder;
+pub(crate) struct JpegEncoder;
 impl Encoder for JpegEncoder {
     fn encode(
         &self,
@@ -178,7 +227,7 @@ impl Encoder for JpegEncoder {
         _tree: Option<&usvg::Tree>,
         img: Option<&DynamicImage>,
         options: &ConvertOptions,
-    ) -> Result<ConversionResult, MartiniError> {
+    ) -> Result<Vec<EncodedFile>, MartiniError> {
         let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
             reason: "Failed to decode/render input image".to_string(),
         })?;
@@ -186,12 +235,20 @@ impl Encoder for JpegEncoder {
         let mut jpeg_bytes = Vec::new();
         let mut cursor = Cursor::new(&mut jpeg_bytes);
         target_img.write_to(&mut cursor, ImageFormat::Jpeg)?;
-        
-        write_single_file(from, to, &jpeg_bytes, options)
+
+        let description = format!(
+            "Converted image from {} to {} (quality: {}, lossless: {})",
+            from, to, options.quality, options.lossless
+        );
+        Ok(vec![EncodedFile {
+            path: options.output_path.clone(),
+            bytes: jpeg_bytes,
+            description,
+        }])
     }
 }
 
-struct FaviconEncoder;
+pub(crate) struct FaviconEncoder;
 impl Encoder for FaviconEncoder {
     fn encode(
         &self,
@@ -200,44 +257,9 @@ impl Encoder for FaviconEncoder {
         tree: Option<&usvg::Tree>,
         img: Option<&DynamicImage>,
         options: &ConvertOptions,
-    ) -> Result<ConversionResult, MartiniError> {
+    ) -> Result<Vec<EncodedFile>, MartiniError> {
         generate_favicon(tree, img, options)
     }
-}
-
-// --- Helper Functions ---
-
-fn write_single_file(
-    from: Format,
-    to: Format,
-    output_bytes: &[u8],
-    options: &ConvertOptions,
-) -> Result<ConversionResult, MartiniError> {
-    if let Some(parent) = options
-        .output_path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-    {
-        fs::create_dir_all(parent)?;
-    }
-
-    fs::write(&options.output_path, output_bytes)?;
-
-    let size_bytes = output_bytes.len() as u64;
-    let description = format!(
-        "Converted image from {} to {} (quality: {}, lossless: {})",
-        from, to, options.quality, options.lossless
-    );
-
-    Ok(ConversionResult {
-        from,
-        to,
-        output_files: vec![OutputFileMetadata {
-            path: options.output_path.to_string_lossy().to_string(),
-            size_bytes,
-            description,
-        }],
-    })
 }
 
 fn encode_avif(img: &DynamicImage, quality: u8, lossless: bool) -> Result<Vec<u8>, MartiniError> {
@@ -269,7 +291,11 @@ fn encode_avif(img: &DynamicImage, quality: u8, lossless: bool) -> Result<Vec<u8
     Ok(res.avif_file)
 }
 
-fn render_svg_to_rgba(tree: &usvg::Tree, width: u32, height: u32) -> Result<Vec<u8>, MartiniError> {
+pub(crate) fn render_svg_to_rgba(
+    tree: &usvg::Tree,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, MartiniError> {
     let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or_else(|| {
         MartiniError::Rendering(format!(
             "Failed to create tiny-skia Pixmap of size {}x{}",
@@ -359,12 +385,11 @@ fn generate_favicon(
     tree: Option<&usvg::Tree>,
     img: Option<&DynamicImage>,
     options: &ConvertOptions,
-) -> Result<ConversionResult, MartiniError> {
+) -> Result<Vec<EncodedFile>, MartiniError> {
     let mut output_files = Vec::new();
 
     if options.package {
         let dir_path = &options.output_path;
-        fs::create_dir_all(dir_path)?;
 
         let sizes = [
             (
@@ -403,11 +428,9 @@ fn generate_favicon(
             }
 
             let file_path = dir_path.join(filename);
-            fs::write(&file_path, &png_data)?;
-
-            output_files.push(OutputFileMetadata {
-                path: file_path.to_string_lossy().to_string(),
-                size_bytes: png_data.len() as u64,
+            output_files.push(EncodedFile {
+                path: file_path,
+                bytes: png_data,
                 description: desc.to_string(),
             });
         }
@@ -418,11 +441,9 @@ fn generate_favicon(
 
         let ico_bytes = build_ico(&png_buffers)?;
         let ico_path = dir_path.join("favicon.ico");
-        fs::write(&ico_path, &ico_bytes)?;
-
-        output_files.push(OutputFileMetadata {
-            path: ico_path.to_string_lossy().to_string(),
-            size_bytes: ico_bytes.len() as u64,
+        output_files.push(EncodedFile {
+            path: ico_path,
+            bytes: ico_bytes,
             description: "Multi-resolution Windows favicon (16x16, 32x32, 48x48)".to_string(),
         });
 
@@ -448,11 +469,9 @@ fn generate_favicon(
 }
 "##;
         let manifest_path = dir_path.join("site.webmanifest");
-        fs::write(&manifest_path, manifest_content)?;
-
-        output_files.push(OutputFileMetadata {
-            path: manifest_path.to_string_lossy().to_string(),
-            size_bytes: manifest_content.len() as u64,
+        output_files.push(EncodedFile {
+            path: manifest_path,
+            bytes: manifest_content.as_bytes().to_vec(),
             description: "Web App Manifest containing icons definitions".to_string(),
         });
 
@@ -463,11 +482,9 @@ fn generate_favicon(
 <link rel="manifest" href="/site.webmanifest">
 "#;
         let html_path = dir_path.join("favicon-tags.html");
-        fs::write(&html_path, html_content)?;
-
-        output_files.push(OutputFileMetadata {
-            path: html_path.to_string_lossy().to_string(),
-            size_bytes: html_content.len() as u64,
+        output_files.push(EncodedFile {
+            path: html_path,
+            bytes: html_content.as_bytes().to_vec(),
             description: "HTML header tags to copy-paste into index.html".to_string(),
         });
     } else {
@@ -480,31 +497,12 @@ fn generate_favicon(
         }
 
         let ico_bytes = build_ico(&png_buffers)?;
-
-        if let Some(parent) = options
-            .output_path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-        {
-            fs::create_dir_all(parent)?;
-        }
-
-        fs::write(&options.output_path, &ico_bytes)?;
-
-        output_files.push(OutputFileMetadata {
-            path: options.output_path.to_string_lossy().to_string(),
-            size_bytes: ico_bytes.len() as u64,
+        output_files.push(EncodedFile {
+            path: options.output_path.clone(),
+            bytes: ico_bytes,
             description: "Multi-resolution Windows favicon (16x16, 32x32, 48x48)".to_string(),
         });
     }
 
-    Ok(ConversionResult {
-        from: if tree.is_some() {
-            Format::Svg
-        } else {
-            Format::Png
-        },
-        to: Format::Favicon,
-        output_files,
-    })
+    Ok(output_files)
 }
