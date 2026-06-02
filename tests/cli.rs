@@ -9,7 +9,7 @@ fn test_list_formats() {
     cmd.arg("list-formats")
         .assert()
         .success()
-        .stdout(predicate::str::contains("svg -> favicon"));
+        .stdout(predicate::str::contains("[any] -> favicon"));
 }
 
 #[test]
@@ -19,7 +19,7 @@ fn test_list_formats_json() {
         .arg("--json")
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"from\": \"svg\""));
+        .stdout(predicate::str::contains("\"to\": \"favicon\""));
 }
 
 #[test]
@@ -105,3 +105,146 @@ fn test_convert_unsupported_formats() {
         .code(6) // UnsupportedConversion exit code
         .stderr(predicate::str::contains("Unsupported conversion"));
 }
+
+#[test]
+fn test_image_conversions() {
+    use image::{ImageBuffer, Rgb, Rgba};
+    let temp_dir = tempdir().unwrap();
+    let input_png = temp_dir.path().join("input.png");
+    let input_jpg = temp_dir.path().join("input.jpg");
+    
+    // Create test images
+    let png_img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
+    png_img.save(&input_png).unwrap();
+    
+    let jpg_img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
+    jpg_img.save(&input_jpg).unwrap();
+
+    // 1. Single png -> webp
+    let out_webp = temp_dir.path().join("output.webp");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("--from").arg("png")
+        .arg("--to").arg("webp")
+        .arg("-i").arg(&input_png)
+        .arg("-o").arg(&out_webp)
+        .assert()
+        .success();
+    assert!(out_webp.exists());
+
+    // 2. Single png -> avif
+    let out_avif = temp_dir.path().join("output.avif");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("--from").arg("png")
+        .arg("--to").arg("avif")
+        .arg("-i").arg(&input_png)
+        .arg("-o").arg(&out_avif)
+        .assert()
+        .success();
+    assert!(out_avif.exists());
+
+    // 3. Batch conversion png/jpg -> both in directory
+    let batch_dir = temp_dir.path().join("batch");
+    fs::create_dir(&batch_dir).unwrap();
+    let batch_png = batch_dir.join("img1.png");
+    let batch_jpg = batch_dir.join("img2.jpg");
+    png_img.save(&batch_png).unwrap();
+    jpg_img.save(&batch_jpg).unwrap();
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("--to").arg("both")
+        .arg("-i").arg(&batch_dir)
+        .arg("--quality").arg("85")
+        .assert()
+        .success();
+
+    assert!(batch_dir.join("img1.webp").exists());
+    assert!(batch_dir.join("img1.avif").exists());
+    assert!(batch_dir.join("img2.webp").exists());
+    assert!(batch_dir.join("img2.avif").exists());
+}
+
+#[test]
+fn test_image_conversions_delete_original() {
+    use image::{ImageBuffer, Rgb};
+    let temp_dir = tempdir().unwrap();
+    let input_jpg = temp_dir.path().join("input.jpg");
+    
+    let jpg_img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
+    jpg_img.save(&input_jpg).unwrap();
+
+    let out_webp = temp_dir.path().join("output.webp");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("--to").arg("webp")
+        .arg("-i").arg(&input_jpg)
+        .arg("-o").arg(&out_webp)
+        .arg("--delete-original")
+        .assert()
+        .success();
+
+    assert!(out_webp.exists());
+    assert!(!input_jpg.exists());
+}
+
+#[test]
+fn test_svg_to_raster_and_raster_to_favicon() {
+    let temp_dir = tempdir().unwrap();
+    
+    // 1. Convert SVG to PNG
+    let out_png = temp_dir.path().join("rendered.png");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("--from").arg("svg")
+        .arg("--to").arg("png")
+        .arg("-i").arg("tests/fixtures/sample.svg")
+        .arg("-o").arg(&out_png)
+        .assert()
+        .success();
+    assert!(out_png.exists());
+    let metadata = fs::metadata(&out_png).unwrap();
+    assert!(metadata.len() > 0);
+
+    // 2. Convert PNG to Favicon
+    let out_favicon = temp_dir.path().join("favicon.ico");
+    let mut cmd2 = Command::cargo_bin("martini").unwrap();
+    cmd2.arg("convert")
+        .arg("--from").arg("png")
+        .arg("--to").arg("favicon")
+        .arg("-i").arg(&out_png)
+        .arg("-o").arg(&out_favicon)
+        .assert()
+        .success();
+    assert!(out_favicon.exists());
+}
+
+#[test]
+fn test_auto_detect_target_format() {
+    use image::{ImageBuffer, Rgba};
+    let temp_dir = tempdir().unwrap();
+    let input_png = temp_dir.path().join("input.png");
+    let png_img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
+    png_img.save(&input_png).unwrap();
+
+    // 1. Auto-detect from output extension (e.g. .webp)
+    let out_webp = temp_dir.path().join("output.webp");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i").arg(&input_png)
+        .arg("-o").arg(&out_webp)
+        .assert()
+        .success();
+    assert!(out_webp.exists());
+
+    // 2. Default target format when output is omitted (in-place WebP)
+    let mut cmd2 = Command::cargo_bin("martini").unwrap();
+    cmd2.arg("convert")
+        .arg("-i").arg(&input_png)
+        .assert()
+        .success();
+    assert!(temp_dir.path().join("input.webp").exists());
+}
+
+

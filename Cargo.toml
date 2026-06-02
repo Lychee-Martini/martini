@@ -24,8 +24,15 @@ clap = { version = "4.6.1", features = ["derive", "env"] }
 # Graphics and Formats
 resvg = "0.47.0"
 tiny-skia = "0.11"
-image = { version = "0.25.10", default-features = false, features = ["png"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 ico = "0.5.0"
+ravif = { version = "0.11.5", default-features = false }
+webp = "0.3"
+imgref = "1.12.1"
+
+# Concurrency & Progress
+rayon = "1.10"
+indicatif = { version = "0.17.8", features = ["rayon"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

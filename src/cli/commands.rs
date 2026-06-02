@@ -25,27 +25,51 @@ pub struct CliArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Convert a file from one format to another
+    /// Convert a file or directory from one format to another
     Convert {
-        /// Source format (e.g. svg)
-        #[arg(long)]
+        /// Source format (e.g. svg, png, jpg, webp, avif). Defaults to 'auto' for auto-detection.
+        #[arg(long, default_value = "auto")]
         from: String,
 
-        /// Target format (e.g. favicon)
+        /// Target format (e.g. favicon, webp, avif, png, jpg, both) (optional)
         #[arg(long)]
-        to: String,
+        to: Option<String>,
 
-        /// Path to the input file
+        /// Path to the input file or directory
         #[arg(short, long)]
         input: PathBuf,
 
-        /// Path to the output file (or directory if generating a package)
+        /// Path to the output file or directory (optional)
         #[arg(short, long)]
-        output: PathBuf,
+        output: Option<PathBuf>,
 
-        /// Generate a full favicon package instead of a single .ico file
+        /// Generate a full favicon package instead of a single .ico file (only for SVG -> favicon)
         #[arg(long)]
         package: bool,
+
+        /// Compression quality (1-100, default 80)
+        #[arg(long, default_value_t = 80)]
+        quality: u8,
+
+        /// Enable lossless compression
+        #[arg(long)]
+        lossless: bool,
+
+        /// Search directory and its subdirectories recursively
+        #[arg(short, long)]
+        recursive: bool,
+
+        /// Delete original images after successful conversion
+        #[arg(short, long)]
+        delete_original: bool,
+
+        /// Overwrite output files if they already exist
+        #[arg(long)]
+        overwrite: bool,
+
+        /// Number of parallel worker threads. Defaults to CPU count.
+        #[arg(short, long)]
+        workers: Option<usize>,
     },
 
     /// List all supported format conversions and their parameters

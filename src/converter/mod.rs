@@ -2,13 +2,17 @@ use crate::error::MartiniError;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-pub mod svg2favicon;
+pub mod image_conv;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Format {
     Svg,
     Favicon,
+    Png,
+    Jpg,
+    Webp,
+    Avif,
 }
 
 impl FromStr for Format {
@@ -18,6 +22,10 @@ impl FromStr for Format {
         match s.to_lowercase().as_str() {
             "svg" => Ok(Format::Svg),
             "favicon" => Ok(Format::Favicon),
+            "png" => Ok(Format::Png),
+            "jpg" | "jpeg" => Ok(Format::Jpg),
+            "webp" => Ok(Format::Webp),
+            "avif" => Ok(Format::Avif),
             _ => Err(format!("Unsupported format: '{}'", s)),
         }
     }
@@ -28,6 +36,10 @@ impl std::fmt::Display for Format {
         match self {
             Format::Svg => write!(f, "svg"),
             Format::Favicon => write!(f, "favicon"),
+            Format::Png => write!(f, "png"),
+            Format::Jpg => write!(f, "jpg"),
+            Format::Webp => write!(f, "webp"),
+            Format::Avif => write!(f, "avif"),
         }
     }
 }
@@ -37,6 +49,9 @@ pub struct ConvertOptions {
     pub input_path: PathBuf,
     pub output_path: PathBuf,
     pub package: bool,
+    pub quality: u8,
+    pub lossless: bool,
+    pub overwrite: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -69,14 +84,6 @@ pub fn convert(
     input_data: &[u8],
     options: &ConvertOptions,
 ) -> Result<ConversionResult, MartiniError> {
-    match (from, to) {
-        (Format::Svg, Format::Favicon) => {
-            let converter = svg2favicon::SvgToFaviconConverter;
-            converter.convert(input_data, options)
-        }
-        _ => Err(MartiniError::UnsupportedConversion {
-            from: from.to_string(),
-            to: to.to_string(),
-        }),
-    }
+    let converter = image_conv::ImageConverter;
+    converter.convert_image(from, to, input_data, options)
 }
