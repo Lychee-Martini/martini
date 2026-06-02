@@ -112,11 +112,11 @@ fn test_image_conversions() {
     let temp_dir = tempdir().unwrap();
     let input_png = temp_dir.path().join("input.png");
     let input_jpg = temp_dir.path().join("input.jpg");
-    
+
     // Create test images
     let png_img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
     png_img.save(&input_png).unwrap();
-    
+
     let jpg_img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
     jpg_img.save(&input_jpg).unwrap();
 
@@ -124,10 +124,14 @@ fn test_image_conversions() {
     let out_webp = temp_dir.path().join("output.webp");
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--from").arg("png")
-        .arg("--to").arg("webp")
-        .arg("-i").arg(&input_png)
-        .arg("-o").arg(&out_webp)
+        .arg("--from")
+        .arg("png")
+        .arg("--to")
+        .arg("webp")
+        .arg("-i")
+        .arg(&input_png)
+        .arg("-o")
+        .arg(&out_webp)
         .assert()
         .success();
     assert!(out_webp.exists());
@@ -136,10 +140,14 @@ fn test_image_conversions() {
     let out_avif = temp_dir.path().join("output.avif");
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--from").arg("png")
-        .arg("--to").arg("avif")
-        .arg("-i").arg(&input_png)
-        .arg("-o").arg(&out_avif)
+        .arg("--from")
+        .arg("png")
+        .arg("--to")
+        .arg("avif")
+        .arg("-i")
+        .arg(&input_png)
+        .arg("-o")
+        .arg(&out_avif)
         .assert()
         .success();
     assert!(out_avif.exists());
@@ -154,9 +162,12 @@ fn test_image_conversions() {
 
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--to").arg("both")
-        .arg("-i").arg(&batch_dir)
-        .arg("--quality").arg("85")
+        .arg("--to")
+        .arg("both")
+        .arg("-i")
+        .arg(&batch_dir)
+        .arg("--quality")
+        .arg("85")
         .assert()
         .success();
 
@@ -171,16 +182,19 @@ fn test_image_conversions_delete_original() {
     use image::{ImageBuffer, Rgb};
     let temp_dir = tempdir().unwrap();
     let input_jpg = temp_dir.path().join("input.jpg");
-    
+
     let jpg_img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
     jpg_img.save(&input_jpg).unwrap();
 
     let out_webp = temp_dir.path().join("output.webp");
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--to").arg("webp")
-        .arg("-i").arg(&input_jpg)
-        .arg("-o").arg(&out_webp)
+        .arg("--to")
+        .arg("webp")
+        .arg("-i")
+        .arg(&input_jpg)
+        .arg("-o")
+        .arg(&out_webp)
         .arg("--delete-original")
         .assert()
         .success();
@@ -192,15 +206,19 @@ fn test_image_conversions_delete_original() {
 #[test]
 fn test_svg_to_raster_and_raster_to_favicon() {
     let temp_dir = tempdir().unwrap();
-    
+
     // 1. Convert SVG to PNG
     let out_png = temp_dir.path().join("rendered.png");
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("--from").arg("svg")
-        .arg("--to").arg("png")
-        .arg("-i").arg("tests/fixtures/sample.svg")
-        .arg("-o").arg(&out_png)
+        .arg("--from")
+        .arg("svg")
+        .arg("--to")
+        .arg("png")
+        .arg("-i")
+        .arg("tests/fixtures/sample.svg")
+        .arg("-o")
+        .arg(&out_png)
         .assert()
         .success();
     assert!(out_png.exists());
@@ -211,10 +229,14 @@ fn test_svg_to_raster_and_raster_to_favicon() {
     let out_favicon = temp_dir.path().join("favicon.ico");
     let mut cmd2 = Command::cargo_bin("martini").unwrap();
     cmd2.arg("convert")
-        .arg("--from").arg("png")
-        .arg("--to").arg("favicon")
-        .arg("-i").arg(&out_png)
-        .arg("-o").arg(&out_favicon)
+        .arg("--from")
+        .arg("png")
+        .arg("--to")
+        .arg("favicon")
+        .arg("-i")
+        .arg(&out_png)
+        .arg("-o")
+        .arg(&out_favicon)
         .assert()
         .success();
     assert!(out_favicon.exists());
@@ -232,8 +254,10 @@ fn test_auto_detect_target_format() {
     let out_webp = temp_dir.path().join("output.webp");
     let mut cmd = Command::cargo_bin("martini").unwrap();
     cmd.arg("convert")
-        .arg("-i").arg(&input_png)
-        .arg("-o").arg(&out_webp)
+        .arg("-i")
+        .arg(&input_png)
+        .arg("-o")
+        .arg(&out_webp)
         .assert()
         .success();
     assert!(out_webp.exists());
@@ -241,10 +265,9 @@ fn test_auto_detect_target_format() {
     // 2. Default target format when output is omitted (in-place WebP)
     let mut cmd2 = Command::cargo_bin("martini").unwrap();
     cmd2.arg("convert")
-        .arg("-i").arg(&input_png)
+        .arg("-i")
+        .arg(&input_png)
         .assert()
         .success();
     assert!(temp_dir.path().join("input.webp").exists());
 }
-
-

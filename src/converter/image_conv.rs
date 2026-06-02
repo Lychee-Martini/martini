@@ -1,10 +1,10 @@
-use std::fs;
-use std::io::Cursor;
-use image::{DynamicImage, ColorType, ImageFormat};
-use image::imageops::FilterType;
 use ico::{IconDir, IconDirEntry, IconImage, ResourceType};
+use image::imageops::FilterType;
+use image::{ColorType, DynamicImage, ImageFormat};
 use resvg::tiny_skia;
 use resvg::usvg;
+use std::fs;
+use std::io::Cursor;
 
 use crate::converter::{ConversionResult, ConvertOptions, Converter, Format, OutputFileMetadata};
 use crate::error::MartiniError;
@@ -29,8 +29,13 @@ impl ImageConverter {
                 let w = svg_tree.size().width().round() as u32;
                 let h = svg_tree.size().height().round() as u32;
                 let rgba = render_svg_to_rgba(&svg_tree, w, h)?;
-                let img_buffer = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(w, h, rgba)
-                    .ok_or_else(|| MartiniError::Rendering("Failed to create ImageBuffer from SVG".to_string()))?;
+                let img_buffer =
+                    image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(w, h, rgba)
+                        .ok_or_else(|| {
+                            MartiniError::Rendering(
+                                "Failed to create ImageBuffer from SVG".to_string(),
+                            )
+                        })?;
                 (Some(svg_tree), Some(DynamicImage::ImageRgba8(img_buffer)))
             } else {
                 (Some(svg_tree), None)
@@ -41,19 +46,15 @@ impl ImageConverter {
         };
 
         // 2. Perform color format standardisation for raster outputs if needed
-        if to != Format::Favicon {
-            if let Some(ref img) = target_img {
-                let color_type = img.color();
-                let converted = match color_type {
-                    ColorType::La8 | ColorType::La16 | ColorType::Rgba8 | ColorType::Rgba16 => {
-                        DynamicImage::ImageRgba8(img.to_rgba8())
-                    }
-                    _ => {
-                        DynamicImage::ImageRgb8(img.to_rgb8())
-                    }
-                };
-                target_img = Some(converted);
-            }
+        if to != Format::Favicon && let Some(ref img) = target_img {
+            let color_type = img.color();
+            let converted = match color_type {
+                ColorType::La8 | ColorType::La16 | ColorType::Rgba8 | ColorType::Rgba16 => {
+                    DynamicImage::ImageRgba8(img.to_rgba8())
+                }
+                _ => DynamicImage::ImageRgb8(img.to_rgb8()),
+            };
+            target_img = Some(converted);
         }
 
         // 3. Encoding & Output Phase
@@ -61,17 +62,16 @@ impl ImageConverter {
             return generate_favicon(tree.as_ref(), target_img.as_ref(), options);
         }
 
-        let target_img = target_img.ok_or_else(|| {
-            MartiniError::InvalidInputData {
-                reason: "Failed to decode/render input image".to_string(),
-            }
+        let target_img = target_img.ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Failed to decode/render input image".to_string(),
         })?;
 
         let mut output_bytes = Vec::new();
         match to {
             Format::Webp => {
-                let webp_encoder = webp::Encoder::from_image(&target_img)
-                    .map_err(|e| MartiniError::Rendering(format!("Failed to create WebP encoder: {}", e)))?;
+                let webp_encoder = webp::Encoder::from_image(&target_img).map_err(|e| {
+                    MartiniError::Rendering(format!("Failed to create WebP encoder: {}", e))
+                })?;
                 let webp_data = if options.lossless {
                     webp_encoder.encode_lossless()
                 } else {
@@ -232,9 +232,10 @@ fn get_png_bytes(
 }
 
 fn rgba_to_png(rgba: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>, MartiniError> {
-    let img = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(width, height, rgba).ok_or_else(|| {
-        MartiniError::Rendering("Failed to create ImageBuffer from raw pixels".to_string())
-    })?;
+    let img = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(width, height, rgba)
+        .ok_or_else(|| {
+            MartiniError::Rendering("Failed to create ImageBuffer from raw pixels".to_string())
+        })?;
 
     let mut png_bytes = Vec::new();
     let mut cursor = Cursor::new(&mut png_bytes);
@@ -265,11 +266,31 @@ fn generate_favicon(
         fs::create_dir_all(dir_path)?;
 
         let sizes = [
-            (16, "favicon-16x16.png", "Standard small favicon for browser tabs"),
-            (32, "favicon-32x32.png", "Standard medium favicon for desktop browsers"),
-            (180, "apple-touch-icon.png", "Apple Touch Icon for iOS home screen"),
-            (192, "android-chrome-192x192.png", "Android Chrome icon for web app manifest"),
-            (512, "android-chrome-512x512.png", "Android Chrome splash icon for web app manifest"),
+            (
+                16,
+                "favicon-16x16.png",
+                "Standard small favicon for browser tabs",
+            ),
+            (
+                32,
+                "favicon-32x32.png",
+                "Standard medium favicon for desktop browsers",
+            ),
+            (
+                180,
+                "apple-touch-icon.png",
+                "Apple Touch Icon for iOS home screen",
+            ),
+            (
+                192,
+                "android-chrome-192x192.png",
+                "Android Chrome icon for web app manifest",
+            ),
+            (
+                512,
+                "android-chrome-512x512.png",
+                "Android Chrome splash icon for web app manifest",
+            ),
         ];
 
         let mut png_buffers = Vec::new();
@@ -377,7 +398,11 @@ fn generate_favicon(
     }
 
     Ok(ConversionResult {
-        from: if tree.is_some() { Format::Svg } else { Format::Png },
+        from: if tree.is_some() {
+            Format::Svg
+        } else {
+            Format::Png
+        },
         to: Format::Favicon,
         output_files,
     })

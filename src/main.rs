@@ -1,14 +1,14 @@
 use clap::Parser;
+use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::str::FromStr;
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
-use rayon::prelude::*;
-use indicatif::{ProgressBar, ProgressStyle};
 
 use martini::cli::{CliArgs, Commands};
-use martini::converter::{self, ConvertOptions, Format, OutputFileMetadata, ConversionResult};
+use martini::converter::{self, ConversionResult, ConvertOptions, Format, OutputFileMetadata};
 use martini::error::MartiniError;
 
 fn main() {
@@ -132,12 +132,16 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 println!("{}", serde_json::to_string_pretty(&formats).unwrap());
             } else {
                 println!("Supported Conversions:");
-                println!("- [any] -> favicon: Convert image to Chrome favicon (single .ico or package). Options: --package");
+                println!(
+                    "- [any] -> favicon: Convert image to Chrome favicon (single .ico or package). Options: --package"
+                );
                 println!("- [any] -> png: Convert image to PNG");
                 println!("- [any] -> jpg: Convert image to JPEG. Options: --quality");
                 println!("- [any] -> webp: Convert image to WebP. Options: --quality, --lossless");
                 println!("- [any] -> avif: Convert image to AVIF. Options: --quality, --lossless");
-                println!("- [any] -> both: Convert image to both WebP and AVIF. Options: --quality, --lossless");
+                println!(
+                    "- [any] -> both: Convert image to both WebP and AVIF. Options: --quality, --lossless"
+                );
             }
             Ok(0)
         }
@@ -165,7 +169,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
 
             // Set up rayon thread pool if custom workers requested
             if let Some(w) = workers {
-                let _ = rayon::ThreadPoolBuilder::new().num_threads(w).build_global();
+                let _ = rayon::ThreadPoolBuilder::new()
+                    .num_threads(w)
+                    .build_global();
             }
 
             // Resolve output formats (targets)
@@ -174,11 +180,16 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 None => {
                     if let Some(ref out_path) = output {
                         if out_path.is_dir() {
-                            let is_svg = input.extension()
+                            let is_svg = input
+                                .extension()
                                 .and_then(|e| e.to_str())
                                 .map(|s| s.to_lowercase() == "svg")
                                 .unwrap_or(false);
-                            if is_svg { "favicon".to_string() } else { "webp".to_string() }
+                            if is_svg {
+                                "favicon".to_string()
+                            } else {
+                                "webp".to_string()
+                            }
                         } else if let Some(ext) = out_path.extension().and_then(|e| e.to_str()) {
                             let ext_lower = ext.to_lowercase();
                             if ext_lower == "ico" || ext_lower == "html" {
@@ -187,18 +198,28 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                 ext_lower
                             }
                         } else {
-                            let is_svg = input.extension()
+                            let is_svg = input
+                                .extension()
                                 .and_then(|e| e.to_str())
                                 .map(|s| s.to_lowercase() == "svg")
                                 .unwrap_or(false);
-                            if is_svg { "favicon".to_string() } else { "webp".to_string() }
+                            if is_svg {
+                                "favicon".to_string()
+                            } else {
+                                "webp".to_string()
+                            }
                         }
                     } else {
-                        let is_svg = input.extension()
+                        let is_svg = input
+                            .extension()
                             .and_then(|e| e.to_str())
                             .map(|s| s.to_lowercase() == "svg")
                             .unwrap_or(false);
-                        if is_svg { "favicon".to_string() } else { "webp".to_string() }
+                        if is_svg {
+                            "favicon".to_string()
+                        } else {
+                            "webp".to_string()
+                        }
                     }
                 }
             };
@@ -207,16 +228,26 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             let targets: Vec<Format> = if to_resolved.to_lowercase() == "both" {
                 vec![Format::Webp, Format::Avif]
             } else {
-                vec![Format::from_str(&to_resolved).map_err(|_| MartiniError::UnsupportedConversion {
-                    from: from.clone(),
-                    to: to_resolved.clone(),
+                vec![Format::from_str(&to_resolved).map_err(|_| {
+                    MartiniError::UnsupportedConversion {
+                        from: from.clone(),
+                        to: to_resolved.clone(),
+                    }
                 })?]
             };
 
             if is_dir {
                 // Batch directory conversion
                 if !args.json && !args.quiet {
-                    print_setup_panel(&input, &to_resolved, quality, lossless, recursive, delete_original, overwrite);
+                    print_setup_panel(
+                        &input,
+                        &to_resolved,
+                        quality,
+                        lossless,
+                        recursive,
+                        delete_original,
+                        overwrite,
+                    );
                     println!("🔍 Scanning for images...");
                 }
 
@@ -242,11 +273,13 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         let out_path = match &output {
                             Some(out_dir) => {
                                 let relative = file_path.strip_prefix(&input).unwrap();
-                                out_dir.join(relative).with_extension(target_fmt.to_string())
+                                out_dir
+                                    .join(relative)
+                                    .with_extension(target_fmt.to_string())
                             }
                             None => file_path.with_extension(target_fmt.to_string()),
                         };
-                        tasks.push((file_path.clone(), target_fmt.clone(), out_path));
+                        tasks.push((file_path.clone(), *target_fmt, out_path));
                     }
                 }
 
@@ -267,7 +300,10 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 let results: Vec<TaskResult> = tasks
                     .par_iter()
                     .map(|(img_path, target_fmt, out_path)| {
-                        pb.set_message(format!("Converting {}", img_path.file_name().unwrap().to_string_lossy()));
+                        pb.set_message(format!(
+                            "Converting {}",
+                            img_path.file_name().unwrap().to_string_lossy()
+                        ));
 
                         let orig_size = img_path.metadata().map(|m| m.len()).unwrap_or(0);
 
@@ -285,7 +321,11 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         }
 
                         // Determine source format by extension
-                        let file_ext = img_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                        let file_ext = img_path
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("")
+                            .to_lowercase();
                         let file_from_fmt = match Format::from_str(&file_ext) {
                             Ok(fmt) => fmt,
                             Err(_) => {
@@ -296,7 +336,10 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                     status: "failed".to_string(),
                                     original_size: orig_size,
                                     converted_size: 0,
-                                    error_message: Some(format!("Unsupported source file extension: {}", file_ext)),
+                                    error_message: Some(format!(
+                                        "Unsupported source file extension: {}",
+                                        file_ext
+                                    )),
                                 };
                             }
                         };
@@ -321,11 +364,16 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                     status: "failed".to_string(),
                                     original_size: orig_size,
                                     converted_size: 0,
-                                    error_message: Some(format!("Failed to read input file: {}", e)),
+                                    error_message: Some(format!(
+                                        "Failed to read input file: {}",
+                                        e
+                                    )),
                                 };
                             }
                         };
-                        if let Err(e) = converter::convert(file_from_fmt, *target_fmt, &input_data, &options) {
+                        if let Err(e) =
+                            converter::convert(file_from_fmt, *target_fmt, &input_data, &options)
+                        {
                             pb.inc(1);
                             return TaskResult {
                                 input_path: img_path.to_string_lossy().to_string(),
@@ -376,8 +424,14 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 if delete_original {
                     for file_path in &files {
                         let path_str = file_path.to_string_lossy().to_string();
-                        let successes = conversion_successes.get(&path_str).map(|s| s.len()).unwrap_or(0);
-                        let failures = conversion_failures.get(&path_str).map(|f| f.len()).unwrap_or(0);
+                        let successes = conversion_successes
+                            .get(&path_str)
+                            .map(|s| s.len())
+                            .unwrap_or(0);
+                        let failures = conversion_failures
+                            .get(&path_str)
+                            .map(|f| f.len())
+                            .unwrap_or(0);
 
                         // Did we successfully convert to all requested targets, with no failures?
                         if successes == targets.len() && failures == 0 {
@@ -394,28 +448,26 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 if args.json {
                     println!("{}", serde_json::to_string_pretty(&results).unwrap());
                 } else {
-                    print_report_table(
-                        &results,
-                        delete_original,
-                        deleted_count,
-                        &del_errors,
-                    );
+                    print_report_table(&results, delete_original, deleted_count, &del_errors);
                 }
 
                 // If any tasks failed, exit with non-zero code
-                let any_failed = results.iter().any(|r| r.status == "failed") || !del_errors.is_empty();
-                if any_failed {
-                    Ok(1)
-                } else {
-                    Ok(0)
-                }
+                let any_failed =
+                    results.iter().any(|r| r.status == "failed") || !del_errors.is_empty();
+                if any_failed { Ok(1) } else { Ok(0) }
             } else {
                 // Single file conversion
                 let from_fmt = if from == "auto" {
-                    let file_ext = input.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-                    Format::from_str(&file_ext).map_err(|_| MartiniError::UnsupportedConversion {
-                        from: file_ext,
-                        to: to_resolved.clone(),
+                    let file_ext = input
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("")
+                        .to_lowercase();
+                    Format::from_str(&file_ext).map_err(|_| {
+                        MartiniError::UnsupportedConversion {
+                            from: file_ext,
+                            to: to_resolved.clone(),
+                        }
                     })?
                 } else {
                     Format::from_str(&from).map_err(|_| MartiniError::UnsupportedConversion {
@@ -437,7 +489,8 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     let out_path = match &output {
                         Some(out) => {
                             if out.is_dir() {
-                                out.join(input.file_name().unwrap()).with_extension(target_fmt.to_string())
+                                out.join(input.file_name().unwrap())
+                                    .with_extension(target_fmt.to_string())
                             } else if targets.len() > 1 {
                                 out.with_extension(target_fmt.to_string())
                             } else {
@@ -472,7 +525,11 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 }
 
                 // Safely delete original if requested
-                if delete_original && output_files.iter().all(|f| !f.description.contains("failed")) {
+                if delete_original
+                    && output_files
+                        .iter()
+                        .all(|f| !f.description.contains("failed"))
+                {
                     std::fs::remove_file(&input)?;
                 }
 
@@ -538,23 +595,23 @@ fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> Vec<P
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with('.') && name != "." {
-                        continue;
-                    }
+
+                if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                    && name.starts_with('.')
+                    && name != "."
+                {
+                    continue;
                 }
 
                 if path.is_dir() {
                     if recursive {
                         dirs_to_visit.push(path);
                     }
-                } else if path.is_file() {
-                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                        if extensions.contains(ext.to_lowercase().as_str()) {
-                            image_files.push(path);
-                        }
-                    }
+                } else if path.is_file()
+                    && let Some(ext) = path.extension().and_then(|e| e.to_str())
+                    && extensions.contains(ext.to_lowercase().as_str())
+                {
+                    image_files.push(path);
                 }
             }
         }
@@ -590,9 +647,15 @@ fn print_setup_panel(
     println!("┌────────────────────────────────────────────────────────┐");
     println!("│                Image Converter Setup                   │");
     println!("├────────────────────────────────────────────────────────┤");
-    println!("│ Target:            {:35} │", truncate_str(&input.to_string_lossy(), 35));
+    println!(
+        "│ Target:            {:35} │",
+        truncate_str(&input.to_string_lossy(), 35)
+    );
     println!("│ Formats:           {:35} │", to);
-    println!("│ Quality:           {:35} │", format!("{} (lossless={})", quality, lossless));
+    println!(
+        "│ Quality:           {:35} │",
+        format!("{} (lossless={})", quality, lossless)
+    );
     println!("│ Recursive:         {:35} │", recursive.to_string());
     println!("│ Delete Original:   {:35} │", delete_original.to_string());
     println!("│ Overwrite Existing:{:35} │", overwrite.to_string());
@@ -631,7 +694,10 @@ fn print_report_table(
     let savings_str = if orig_size == 0 {
         "0 B (0% saved)".to_string()
     } else if saved_bytes < 0 {
-        format!("-{} (size increased)", format_size(saved_bytes.unsigned_abs()))
+        format!(
+            "-{} (size increased)",
+            format_size(saved_bytes.unsigned_abs())
+        )
     } else {
         let pct = (saved_bytes as f64 / orig_size as f64) * 100.0;
         format!("{} ({:.1}% saved)", format_size(saved_bytes as u64), pct)
@@ -648,7 +714,10 @@ fn print_report_table(
     if delete_original {
         println!("│ Originals Deleted: \x1b[31m{:20}\x1b[0m │", deleted_count);
         if !del_errors.is_empty() {
-            println!("│ Deletion Failures: \x1b[31m{:20}\x1b[0m │", del_errors.len());
+            println!(
+                "│ Deletion Failures: \x1b[31m{:20}\x1b[0m │",
+                del_errors.len()
+            );
         }
     }
     println!("│ Original Size:     {:20} │", format_size(orig_size));
@@ -663,7 +732,10 @@ fn print_report_table(
         println!("--------------------------------------------------");
         for fail in failures {
             println!("📄 File: {}", fail.input_path);
-            println!("   Error: {}", fail.error_message.as_deref().unwrap_or("Unknown error"));
+            println!(
+                "   Error: {}",
+                fail.error_message.as_deref().unwrap_or("Unknown error")
+            );
             println!();
         }
     }
