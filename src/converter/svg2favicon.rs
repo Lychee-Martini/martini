@@ -149,10 +149,12 @@ impl Converter for SvgToFaviconConverter {
             let ico_bytes = build_ico(&png_buffers)?;
 
             // Ensure parent directory of output exists
-            if let Some(parent) = options.output_path.parent() {
-                if !parent.as_os_str().is_empty() {
-                    fs::create_dir_all(parent)?;
-                }
+            if let Some(parent) = options
+                .output_path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+            {
+                fs::create_dir_all(parent)?;
             }
 
             fs::write(&options.output_path, &ico_bytes)?;
