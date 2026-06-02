@@ -48,3 +48,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 assert_cmd = "2.0"
 predicates = "3.1"
 tempfile = "3.10"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

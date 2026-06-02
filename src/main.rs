@@ -272,7 +272,14 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         // Output path resolution
                         let out_path = match &output {
                             Some(out_dir) => {
-                                let relative = file_path.strip_prefix(&input).unwrap();
+                                let relative = file_path.strip_prefix(&input).map_err(|_| {
+                                    MartiniError::InvalidInputData {
+                                        reason: format!(
+                                            "File path {:?} does not start with input directory {:?}",
+                                            file_path, input
+                                        ),
+                                    }
+                                })?;
                                 out_dir
                                     .join(relative)
                                     .with_extension(target_fmt.to_string())
@@ -300,10 +307,11 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 let results: Vec<TaskResult> = tasks
                     .par_iter()
                     .map(|(img_path, target_fmt, out_path)| {
-                        pb.set_message(format!(
-                            "Converting {}",
-                            img_path.file_name().unwrap().to_string_lossy()
-                        ));
+                        let name_str = img_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy())
+                            .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
+                        pb.set_message(format!("Converting {}", name_str));
 
                         let orig_size = img_path.metadata().map(|m| m.len()).unwrap_or(0);
 
@@ -489,8 +497,12 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     let out_path = match &output {
                         Some(out) => {
                             if out.is_dir() {
-                                out.join(input.file_name().unwrap())
-                                    .with_extension(target_fmt.to_string())
+                                let filename = input.file_name().ok_or_else(|| {
+                                    MartiniError::InvalidInputData {
+                                        reason: "Input path has no filename".to_string(),
+                                    }
+                                })?;
+                                out.join(filename).with_extension(target_fmt.to_string())
                             } else if targets.len() > 1 {
                                 out.with_extension(target_fmt.to_string())
                             } else {

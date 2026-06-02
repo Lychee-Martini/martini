@@ -57,73 +57,22 @@ impl ImageConverter {
             target_img = Some(converted);
         }
 
-        // 3. Encoding & Output Phase
-        if to == Format::Favicon {
-            return generate_favicon(tree.as_ref(), target_img.as_ref(), options);
-        }
-
-        let target_img = target_img.ok_or_else(|| MartiniError::InvalidInputData {
-            reason: "Failed to decode/render input image".to_string(),
-        })?;
-
-        let mut output_bytes = Vec::new();
-        match to {
-            Format::Webp => {
-                let webp_encoder = webp::Encoder::from_image(&target_img).map_err(|e| {
-                    MartiniError::Rendering(format!("Failed to create WebP encoder: {}", e))
-                })?;
-                let webp_data = if options.lossless {
-                    webp_encoder.encode_lossless()
-                } else {
-                    webp_encoder.encode(options.quality as f32)
-                };
-                output_bytes = webp_data.to_vec();
-            }
-            Format::Avif => {
-                output_bytes = encode_avif(&target_img, options.quality, options.lossless)?;
-            }
-            Format::Png => {
-                let mut cursor = Cursor::new(&mut output_bytes);
-                target_img.write_to(&mut cursor, ImageFormat::Png)?;
-            }
-            Format::Jpg => {
-                let mut cursor = Cursor::new(&mut output_bytes);
-                target_img.write_to(&mut cursor, ImageFormat::Jpeg)?;
-            }
+        // 3. Dispatch to specific format strategy
+        let encoder: Box<dyn Encoder> = match to {
+            Format::Webp => Box::new(WebpEncoder),
+            Format::Avif => Box::new(AvifEncoder),
+            Format::Png => Box::new(PngEncoder),
+            Format::Jpg => Box::new(JpegEncoder),
+            Format::Favicon => Box::new(FaviconEncoder),
             _ => {
                 return Err(MartiniError::UnsupportedConversion {
                     from: from.to_string(),
                     to: to.to_string(),
                 });
             }
-        }
+        };
 
-        // Ensure parent directory of output exists
-        if let Some(parent) = options
-            .output_path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-        {
-            fs::create_dir_all(parent)?;
-        }
-
-        fs::write(&options.output_path, &output_bytes)?;
-
-        let size_bytes = output_bytes.len() as u64;
-        let description = format!(
-            "Converted image from {} to {} (quality: {}, lossless: {})",
-            from, to, options.quality, options.lossless
-        );
-
-        Ok(ConversionResult {
-            from,
-            to,
-            output_files: vec![OutputFileMetadata {
-                path: options.output_path.to_string_lossy().to_string(),
-                size_bytes,
-                description,
-            }],
-        })
+        encoder.encode(from, to, tree.as_ref(), target_img.as_ref(), options)
     }
 }
 
@@ -137,6 +86,158 @@ impl Converter for ImageConverter {
         // Fallback default conversion
         self.convert_image(Format::Png, Format::Webp, input_data, options)
     }
+}
+
+// --- Strategy Pattern for Image Format Encoders ---
+
+pub trait Encoder {
+    fn encode(
+        &self,
+        from: Format,
+        to: Format,
+        tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<ConversionResult, MartiniError>;
+}
+
+struct WebpEncoder;
+impl Encoder for WebpEncoder {
+    fn encode(
+        &self,
+        from: Format,
+        to: Format,
+        _tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<ConversionResult, MartiniError> {
+        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Failed to decode/render input image".to_string(),
+        })?;
+
+        let webp_encoder = webp::Encoder::from_image(target_img).map_err(|e| {
+            MartiniError::Rendering(format!("Failed to create WebP encoder: {}", e))
+        })?;
+        let webp_data = if options.lossless {
+            webp_encoder.encode_lossless()
+        } else {
+            webp_encoder.encode(options.quality as f32)
+        };
+        
+        write_single_file(from, to, &webp_data, options)
+    }
+}
+
+struct AvifEncoder;
+impl Encoder for AvifEncoder {
+    fn encode(
+        &self,
+        from: Format,
+        to: Format,
+        _tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<ConversionResult, MartiniError> {
+        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Failed to decode/render input image".to_string(),
+        })?;
+
+        let avif_bytes = encode_avif(target_img, options.quality, options.lossless)?;
+        write_single_file(from, to, &avif_bytes, options)
+    }
+}
+
+struct PngEncoder;
+impl Encoder for PngEncoder {
+    fn encode(
+        &self,
+        from: Format,
+        to: Format,
+        _tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<ConversionResult, MartiniError> {
+        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Failed to decode/render input image".to_string(),
+        })?;
+
+        let mut png_bytes = Vec::new();
+        let mut cursor = Cursor::new(&mut png_bytes);
+        target_img.write_to(&mut cursor, ImageFormat::Png)?;
+        
+        write_single_file(from, to, &png_bytes, options)
+    }
+}
+
+struct JpegEncoder;
+impl Encoder for JpegEncoder {
+    fn encode(
+        &self,
+        from: Format,
+        to: Format,
+        _tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<ConversionResult, MartiniError> {
+        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Failed to decode/render input image".to_string(),
+        })?;
+
+        let mut jpeg_bytes = Vec::new();
+        let mut cursor = Cursor::new(&mut jpeg_bytes);
+        target_img.write_to(&mut cursor, ImageFormat::Jpeg)?;
+        
+        write_single_file(from, to, &jpeg_bytes, options)
+    }
+}
+
+struct FaviconEncoder;
+impl Encoder for FaviconEncoder {
+    fn encode(
+        &self,
+        _from: Format,
+        _to: Format,
+        tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<ConversionResult, MartiniError> {
+        generate_favicon(tree, img, options)
+    }
+}
+
+// --- Helper Functions ---
+
+fn write_single_file(
+    from: Format,
+    to: Format,
+    output_bytes: &[u8],
+    options: &ConvertOptions,
+) -> Result<ConversionResult, MartiniError> {
+    if let Some(parent) = options
+        .output_path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
+
+    fs::write(&options.output_path, output_bytes)?;
+
+    let size_bytes = output_bytes.len() as u64;
+    let description = format!(
+        "Converted image from {} to {} (quality: {}, lossless: {})",
+        from, to, options.quality, options.lossless
+    );
+
+    Ok(ConversionResult {
+        from,
+        to,
+        output_files: vec![OutputFileMetadata {
+            path: options.output_path.to_string_lossy().to_string(),
+            size_bytes,
+            description,
+        }],
+    })
 }
 
 fn encode_avif(img: &DynamicImage, quality: u8, lossless: bool) -> Result<Vec<u8>, MartiniError> {
