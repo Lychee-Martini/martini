@@ -70,109 +70,37 @@ fn main() {
 fn run(args: CliArgs) -> Result<i32, MartiniError> {
     match args.command {
         Commands::ListFormats => {
-            let formats = vec![
-                serde_json::json!({
-                    "from": "svg, png, jpg, jpeg, webp, avif",
-                    "to": "favicon",
-                    "description": "Convert an SVG or raster image to a Chrome favicon (.ico or full favicon package)",
-                    "parameters": {
-                        "package": "boolean (generates a package of optimized PNGs, manifest, and HTML copy-paste snippets alongside the .ico file)"
-                    }
-                }),
-                serde_json::json!({
-                    "from": "svg, png, jpg, jpeg, webp, avif",
-                    "to": "png",
-                    "description": "Convert images to PNG format",
-                    "parameters": {
-                        "overwrite": "boolean (default false)",
-                        "delete_original": "boolean (default false)",
-                        "recursive": "boolean (default false)",
-                        "workers": "integer (optional)"
-                    }
-                }),
-                serde_json::json!({
-                    "from": "svg, png, jpg, jpeg, webp, avif",
-                    "to": "jpg",
-                    "description": "Convert images to JPEG format",
-                    "parameters": {
-                        "quality": "integer (1-100, default 80)",
-                        "overwrite": "boolean (default false)",
-                        "delete_original": "boolean (default false)",
-                        "recursive": "boolean (default false)",
-                        "workers": "integer (optional)"
-                    }
-                }),
-                serde_json::json!({
-                    "from": "svg, png, jpg, jpeg, webp, avif",
-                    "to": "webp",
-                    "description": "Convert images to WebP format",
-                    "parameters": {
-                        "quality": "integer (1-100, default 80)",
-                        "lossless": "boolean (default false)",
-                        "overwrite": "boolean (default false)",
-                        "delete_original": "boolean (default false)",
-                        "recursive": "boolean (default false)",
-                        "workers": "integer (optional)"
-                    }
-                }),
-                serde_json::json!({
-                    "from": "svg, png, jpg, jpeg, webp, avif",
-                    "to": "avif",
-                    "description": "Convert images to AVIF format",
-                    "parameters": {
-                        "quality": "integer (1-100, default 80)",
-                        "lossless": "boolean (default false)",
-                        "overwrite": "boolean (default false)",
-                        "delete_original": "boolean (default false)",
-                        "recursive": "boolean (default false)",
-                        "workers": "integer (optional)"
-                    }
-                }),
-                serde_json::json!({
-                    "from": "svg, png, jpg, jpeg, webp, avif",
-                    "to": "both",
-                    "description": "Convert images to both WebP and AVIF formats",
-                    "parameters": {
-                        "quality": "integer (1-100, default 80)",
-                        "lossless": "boolean (default false)",
-                        "overwrite": "boolean (default false)",
-                        "delete_original": "boolean (default false)",
-                        "recursive": "boolean (default false)",
-                        "workers": "integer (optional)"
-                    }
-                }),
-                serde_json::json!({
-                    "from": "pdf",
-                    "to": "png, jpg, jpeg, webp, avif",
-                    "description": "Convert PDF pages to images",
-                    "parameters": {
-                        "pages": "string (comma-separated page numbers or ranges, e.g. '1,3-5')",
-                        "dpi": "integer (rendering DPI, default 150)",
-                        "quality": "integer (1-100, default 80)",
-                        "lossless": "boolean (default false)",
-                        "overwrite": "boolean (default false)",
-                        "delete_original": "boolean (default false)"
-                    }
-                }),
-            ];
-
+            let formats = martini::get_supported_formats();
             if args.json {
                 println!("{}", serde_json::to_string_pretty(&formats).unwrap());
             } else {
                 println!("Supported Conversions:");
-                println!(
-                    "- [any] -> favicon: Convert image to Chrome favicon (single .ico or package). Options: --package"
-                );
-                println!("- [any] -> png: Convert image to PNG");
-                println!("- [any] -> jpg: Convert image to JPEG. Options: --quality");
-                println!("- [any] -> webp: Convert image to WebP. Options: --quality, --lossless");
-                println!("- [any] -> avif: Convert image to AVIF. Options: --quality, --lossless");
-                println!(
-                    "- [any] -> both: Convert image to both WebP and AVIF. Options: --quality, --lossless"
-                );
-                println!(
-                    "- pdf -> [png/jpg/webp/avif]: Convert PDF pages to images. Options: --pages, --dpi, --quality, --lossless"
-                );
+                for f in formats {
+                    let display_from = if f.from == "svg, png, jpg, jpeg, webp, avif" {
+                        "[any]".to_string()
+                    } else {
+                        f.from.clone()
+                    };
+                    let display_to = if f.to == "png, jpg, jpeg, webp, avif" {
+                        "[png/jpg/webp/avif]".to_string()
+                    } else {
+                        f.to.clone()
+                    };
+
+                    let options_str = match f.to.as_str() {
+                        "favicon" => ". Options: --package",
+                        "png" => "",
+                        "jpg" => ". Options: --quality",
+                        "webp" | "avif" | "both" => ". Options: --quality, --lossless",
+                        _ if f.from == "pdf" => ". Options: --pages, --dpi, --quality, --lossless",
+                        _ => "",
+                    };
+
+                    println!(
+                        "- {} -> {}: {}{}",
+                        display_from, display_to, f.description, options_str
+                    );
+                }
             }
             Ok(0)
         }
