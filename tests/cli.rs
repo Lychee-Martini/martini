@@ -350,3 +350,30 @@ fn test_pdfium_thread_safety() {
         t.join().unwrap();
     }
 }
+
+#[test]
+fn test_favicon_package_smart_path() {
+    let temp_dir = tempdir().unwrap();
+    let output_file_path = temp_dir.path().join("sub_folder").join("my_icon.ico");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg("tests/fixtures/sample.svg")
+        .arg("-o")
+        .arg(&output_file_path)
+        .arg("--to")
+        .arg("favicon")
+        .arg("--package")
+        .assert()
+        .success();
+
+    // Ensure primary ICO is at the exact path
+    assert!(output_file_path.exists());
+    assert!(output_file_path.is_file());
+    
+    // Companion files should be in the same folder as my_icon.ico
+    let parent_dir = output_file_path.parent().unwrap();
+    assert!(parent_dir.join("favicon-16x16.png").exists());
+    assert!(parent_dir.join("site.webmanifest").exists());
+}
