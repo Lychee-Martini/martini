@@ -431,7 +431,7 @@ fn process_file_task(
                 continue;
             }
 
-            let pdfium = match bind_pdfium_silent() {
+            let pdfium = match crate::converter::pdf_conv::get_pdfium() {
                 Ok(p) => p,
                 Err(e) => {
                     let _ = write_tx.send(WritePayload {

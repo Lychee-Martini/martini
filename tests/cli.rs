@@ -337,3 +337,16 @@ fn test_convert_pdf_to_images() {
     let out_single = temp_dir.path().join("output_single_page_2.jpg");
     assert!(out_single.exists());
 }
+
+#[test]
+fn test_pdfium_thread_safety() {
+    let threads: Vec<_> = (0..3).map(|_| {
+        std::thread::spawn(|| {
+            let mut cmd = Command::cargo_bin("martini").unwrap();
+            cmd.arg("list-formats").assert().success();
+        })
+    }).collect();
+    for t in threads {
+        t.join().unwrap();
+    }
+}

@@ -1,10 +1,28 @@
 use pdfium_auto::bind_pdfium_silent;
 use pdfium_render::prelude::*;
 use std::fs;
+use std::sync::OnceLock;
 
 use crate::converter::image_conv::{AvifEncoder, Encoder, JpegEncoder, PngEncoder, WebpEncoder};
 use crate::converter::{ConversionResult, ConvertOptions, Format, OutputFileMetadata};
 use crate::error::MartiniError;
+
+pub struct ThreadSafePdfium(pub Pdfium);
+unsafe impl Send for ThreadSafePdfium {}
+unsafe impl Sync for ThreadSafePdfium {}
+
+static PDFIUM: OnceLock<Result<ThreadSafePdfium, String>> = OnceLock::new();
+
+pub fn get_pdfium() -> Result<&'static Pdfium, MartiniError> {
+    let res = PDFIUM.get_or_init(|| {
+        bind_pdfium_silent()
+            .map(ThreadSafePdfium)
+            .map_err(|e| format!("Failed to load PDFium library: {:?}", e))
+    });
+    res.as_ref()
+        .map(|ts| &ts.0)
+        .map_err(|e| MartiniError::PdfRender(e.clone()))
+}
 
 pub struct PdfConverter;
 
@@ -16,9 +34,7 @@ impl PdfConverter {
         options: &ConvertOptions,
     ) -> Result<ConversionResult, MartiniError> {
         // 1. Bind to PDFium library
-        let pdfium = bind_pdfium_silent().map_err(|e| {
-            MartiniError::PdfRender(format!("Failed to load PDFium library: {:?}", e))
-        })?;
+        let pdfium = get_pdfium()?;
 
         // 2. Load the PDF document
         let document = pdfium
