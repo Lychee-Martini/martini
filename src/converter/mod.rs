@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 pub mod batch;
 pub mod image_conv;
+pub mod pdf_conv;
 
 #[derive(Debug, Clone)]
 pub struct EncodedFile {
@@ -21,6 +22,7 @@ pub enum Format {
     Jpg,
     Webp,
     Avif,
+    Pdf,
 }
 
 impl FromStr for Format {
@@ -34,6 +36,7 @@ impl FromStr for Format {
             "jpg" | "jpeg" => Ok(Format::Jpg),
             "webp" => Ok(Format::Webp),
             "avif" => Ok(Format::Avif),
+            "pdf" => Ok(Format::Pdf),
             _ => Err(format!("Unsupported format: '{}'", s)),
         }
     }
@@ -48,6 +51,7 @@ impl std::fmt::Display for Format {
             Format::Jpg => write!(f, "jpg"),
             Format::Webp => write!(f, "webp"),
             Format::Avif => write!(f, "avif"),
+            Format::Pdf => write!(f, "pdf"),
         }
     }
 }
@@ -60,6 +64,8 @@ pub struct ConvertOptions {
     pub quality: u8,
     pub lossless: bool,
     pub overwrite: bool,
+    pub pages: Option<String>,
+    pub dpi: u16,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -92,6 +98,18 @@ pub fn convert(
     input_data: &[u8],
     options: &ConvertOptions,
 ) -> Result<ConversionResult, MartiniError> {
-    let converter = image_conv::ImageConverter;
-    converter.convert_image(from, to, input_data, options)
+    if to == Format::Pdf && from != Format::Pdf {
+        return Err(MartiniError::UnsupportedConversion {
+            from: from.to_string(),
+            to: to.to_string(),
+        });
+    }
+
+    if from == Format::Pdf {
+        let converter = pdf_conv::PdfConverter;
+        converter.convert_pdf(to, input_data, options)
+    } else {
+        let converter = image_conv::ImageConverter;
+        converter.convert_image(from, to, input_data, options)
+    }
 }

@@ -25,6 +25,9 @@ pub enum MartiniError {
 
     #[error("Output writing error: {reason}")]
     OutputWrite { reason: String },
+
+    #[error("PDF rendering error: {0}")]
+    PdfRender(String),
 }
 
 impl MartiniError {
@@ -33,7 +36,7 @@ impl MartiniError {
         match self {
             MartiniError::InputFileNotFound { .. } => 2,
             MartiniError::InvalidInputData { .. } | MartiniError::SvgParse(_) => 3,
-            MartiniError::Rendering(_) | MartiniError::Image(_) => 4,
+            MartiniError::Rendering(_) | MartiniError::Image(_) | MartiniError::PdfRender(_) => 4,
             MartiniError::Io(e) if e.kind() == std::io::ErrorKind::NotFound => 2,
             MartiniError::Io(e) if e.kind() == std::io::ErrorKind::PermissionDenied => 5,
             MartiniError::Io(_) => 4, // General system/io processing issue

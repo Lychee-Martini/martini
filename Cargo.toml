@@ -29,6 +29,8 @@ ico = "0.5.0"
 ravif = { version = "0.11.5", default-features = false }
 webp = "0.3"
 imgref = "1.12.1"
+pdfium-render = { version = "0.8.37", features = ["image_025"] }
+pdfium-auto = "0.3.0"
 
 # Concurrency & Progress
 rayon = "1.10"

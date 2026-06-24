@@ -141,6 +141,19 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         "workers": "integer (optional)"
                     }
                 }),
+                serde_json::json!({
+                    "from": "pdf",
+                    "to": "png, jpg, jpeg, webp, avif",
+                    "description": "Convert PDF pages to images",
+                    "parameters": {
+                        "pages": "string (comma-separated page numbers or ranges, e.g. '1,3-5')",
+                        "dpi": "integer (rendering DPI, default 150)",
+                        "quality": "integer (1-100, default 80)",
+                        "lossless": "boolean (default false)",
+                        "overwrite": "boolean (default false)",
+                        "delete_original": "boolean (default false)"
+                    }
+                }),
             ];
 
             if args.json {
@@ -157,6 +170,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 println!(
                     "- [any] -> both: Convert image to both WebP and AVIF. Options: --quality, --lossless"
                 );
+                println!(
+                    "- pdf -> [png/jpg/webp/avif]: Convert PDF pages to images. Options: --pages, --dpi, --quality, --lossless"
+                );
             }
             Ok(0)
         }
@@ -172,6 +188,8 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             delete_original,
             overwrite,
             workers,
+            pages,
+            dpi,
         } => {
             if !input.exists() {
                 return Err(MartiniError::InputFileNotFound {
@@ -190,18 +208,26 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             }
 
             // Resolve output formats (targets)
+            let is_svg = input
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_lowercase() == "svg")
+                .unwrap_or(false);
+            let is_pdf = input
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_lowercase() == "pdf")
+                .unwrap_or(false);
+
             let to_resolved = match to {
                 Some(ref t) => t.clone(),
                 None => {
                     if let Some(ref out_path) = output {
                         if out_path.is_dir() {
-                            let is_svg = input
-                                .extension()
-                                .and_then(|e| e.to_str())
-                                .map(|s| s.to_lowercase() == "svg")
-                                .unwrap_or(false);
                             if is_svg {
                                 "favicon".to_string()
+                            } else if is_pdf {
+                                "png".to_string()
                             } else {
                                 "webp".to_string()
                             }
@@ -213,25 +239,19 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                 ext_lower
                             }
                         } else {
-                            let is_svg = input
-                                .extension()
-                                .and_then(|e| e.to_str())
-                                .map(|s| s.to_lowercase() == "svg")
-                                .unwrap_or(false);
                             if is_svg {
                                 "favicon".to_string()
+                            } else if is_pdf {
+                                "png".to_string()
                             } else {
                                 "webp".to_string()
                             }
                         }
                     } else {
-                        let is_svg = input
-                            .extension()
-                            .and_then(|e| e.to_str())
-                            .map(|s| s.to_lowercase() == "svg")
-                            .unwrap_or(false);
                         if is_svg {
                             "favicon".to_string()
+                        } else if is_pdf {
+                            "png".to_string()
                         } else {
                             "webp".to_string()
                         }
@@ -308,6 +328,8 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     overwrite,
                     delete_original,
                     workers,
+                    pages: pages.clone(),
+                    dpi,
                 };
 
                 let batch_result = batch_convert(batch_options, Some(tracker))?;
@@ -397,6 +419,8 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         quality,
                         lossless,
                         overwrite,
+                        pages: pages.clone(),
+                        dpi,
                     };
 
                     info!("Starting conversion to {}...", target_fmt);

@@ -271,3 +271,69 @@ fn test_auto_detect_target_format() {
         .success();
     assert!(temp_dir.path().join("input.webp").exists());
 }
+
+#[test]
+fn test_convert_pdf_to_images() {
+    use pdfium_auto::bind_pdfium_silent;
+    use pdfium_render::prelude::*;
+
+    let temp_dir = tempdir().unwrap();
+    let input_pdf = temp_dir.path().join("test_input.pdf");
+
+    // 1. Create a simple PDF file with 2 blank pages
+    let pdfium = bind_pdfium_silent().expect("Failed to load PDFium");
+    let mut document = pdfium.create_new_pdf().expect("Failed to create new PDF");
+    document
+        .pages_mut()
+        .create_page_at_end(PdfPagePaperSize::a4())
+        .expect("Failed to create page 1");
+    document
+        .pages_mut()
+        .create_page_at_end(PdfPagePaperSize::a4())
+        .expect("Failed to create page 2");
+
+    // Save to file
+    let pdf_bytes = document
+        .save_to_bytes()
+        .expect("Failed to save PDF to bytes");
+    fs::write(&input_pdf, &pdf_bytes).expect("Failed to write test PDF");
+
+    // 2. Convert PDF to PNG via CLI (all pages by default)
+    let output_png = temp_dir.path().join("output.png");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("--from")
+        .arg("pdf")
+        .arg("--to")
+        .arg("png")
+        .arg("-i")
+        .arg(&input_pdf)
+        .arg("-o")
+        .arg(&output_png)
+        .assert()
+        .success();
+
+    // Verify output files are created with correct suffix
+    let out_page1 = temp_dir.path().join("output_page_1.png");
+    let out_page2 = temp_dir.path().join("output_page_2.png");
+    assert!(out_page1.exists());
+    assert!(out_page2.exists());
+
+    // 3. Convert specific page with custom DPI
+    let output_jpg = temp_dir.path().join("output_single.jpg");
+    let mut cmd2 = Command::cargo_bin("martini").unwrap();
+    cmd2.arg("convert")
+        .arg("-i")
+        .arg(&input_pdf)
+        .arg("-o")
+        .arg(&output_jpg)
+        .arg("--pages")
+        .arg("2")
+        .arg("--dpi")
+        .arg("100")
+        .assert()
+        .success();
+
+    let out_single = temp_dir.path().join("output_single_page_2.jpg");
+    assert!(out_single.exists());
+}

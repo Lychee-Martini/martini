@@ -30,6 +30,8 @@ pub struct BatchConvertOptions {
     pub overwrite: bool,
     pub delete_original: bool,
     pub workers: Option<usize>,
+    pub pages: Option<String>,
+    pub dpi: u16,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -79,6 +81,8 @@ pub fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> V
         "jpg" | "jpeg" => ["jpg", "jpeg"].iter().copied().collect(),
         "webp" => ["webp"].iter().copied().collect(),
         "avif" => ["avif"].iter().copied().collect(),
+        "svg" => ["svg"].iter().copied().collect(),
+        "pdf" => ["pdf"].iter().copied().collect(),
         _ => ["png", "jpg", "jpeg"].iter().copied().collect(), // default/auto
     };
 
@@ -247,8 +251,7 @@ pub fn batch_convert(
                         && let Err(e) = std::fs::create_dir_all(parent)
                     {
                         write_failed = true;
-                        error_message =
-                            Some(format!("Failed to create parent directories: {}", e));
+                        error_message = Some(format!("Failed to create parent directories: {}", e));
                         break;
                     }
                     if let Err(e) = std::fs::write(&file.path, &file.bytes) {
@@ -406,6 +409,228 @@ fn process_file_task(
         }
     };
 
+    if from_fmt == Format::Pdf {
+        use pdfium_auto::bind_pdfium_silent;
+        use pdfium_render::prelude::PdfRenderConfig;
+
+        for sub in file_task.sub_tasks {
+            if sub.out_path.exists() && !options.overwrite {
+                let converted_size = sub.out_path.metadata().map(|m| m.len()).unwrap_or(0);
+                let _ = write_tx.send(WritePayload {
+                    input_path: input_path.clone(),
+                    target_fmt: sub.target_fmt,
+                    status: "skipped".to_string(),
+                    original_size,
+                    converted_size,
+                    error_message: None,
+                    files_to_write: Vec::new(),
+                });
+                if let Some(ref t) = tracker {
+                    t.inc(1);
+                }
+                continue;
+            }
+
+            let pdfium = match bind_pdfium_silent() {
+                Ok(p) => p,
+                Err(e) => {
+                    let _ = write_tx.send(WritePayload {
+                        input_path: input_path.clone(),
+                        target_fmt: sub.target_fmt,
+                        status: "failed".to_string(),
+                        original_size,
+                        converted_size: 0,
+                        error_message: Some(format!("Failed to load PDFium: {:?}", e)),
+                        files_to_write: Vec::new(),
+                    });
+                    if let Some(ref t) = tracker {
+                        t.inc(1);
+                    }
+                    continue;
+                }
+            };
+
+            let document = match pdfium.load_pdf_from_byte_slice(&input_bytes, None) {
+                Ok(doc) => doc,
+                Err(e) => {
+                    let _ = write_tx.send(WritePayload {
+                        input_path: input_path.clone(),
+                        target_fmt: sub.target_fmt,
+                        status: "failed".to_string(),
+                        original_size,
+                        converted_size: 0,
+                        error_message: Some(format!("Failed to parse PDF: {:?}", e)),
+                        files_to_write: Vec::new(),
+                    });
+                    if let Some(ref t) = tracker {
+                        t.inc(1);
+                    }
+                    continue;
+                }
+            };
+
+            let total_pages = document.pages().len() as u16;
+            if total_pages == 0 {
+                let _ = write_tx.send(WritePayload {
+                    input_path: input_path.clone(),
+                    target_fmt: sub.target_fmt,
+                    status: "failed".to_string(),
+                    original_size,
+                    converted_size: 0,
+                    error_message: Some("PDF has no pages".to_string()),
+                    files_to_write: Vec::new(),
+                });
+                if let Some(ref t) = tracker {
+                    t.inc(1);
+                }
+                continue;
+            }
+
+            let pages_to_render = if let Some(ref range_str) = options.pages {
+                match crate::converter::pdf_conv::parse_pages(range_str, total_pages) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let _ = write_tx.send(WritePayload {
+                            input_path: input_path.clone(),
+                            target_fmt: sub.target_fmt,
+                            status: "failed".to_string(),
+                            original_size,
+                            converted_size: 0,
+                            error_message: Some(format!("Invalid page selection: {}", e)),
+                            files_to_write: Vec::new(),
+                        });
+                        if let Some(ref t) = tracker {
+                            t.inc(1);
+                        }
+                        continue;
+                    }
+                }
+            } else {
+                (0..total_pages).collect()
+            };
+
+            let encoder: Box<dyn crate::converter::image_conv::Encoder> = match sub.target_fmt {
+                Format::Webp => Box::new(crate::converter::image_conv::WebpEncoder),
+                Format::Avif => Box::new(crate::converter::image_conv::AvifEncoder),
+                Format::Png => Box::new(crate::converter::image_conv::PngEncoder),
+                Format::Jpg => Box::new(crate::converter::image_conv::JpegEncoder),
+                _ => {
+                    let _ = write_tx.send(WritePayload {
+                        input_path: input_path.clone(),
+                        target_fmt: sub.target_fmt,
+                        status: "failed".to_string(),
+                        original_size,
+                        converted_size: 0,
+                        error_message: Some(format!(
+                            "Unsupported target format for PDF: '{}'",
+                            sub.target_fmt
+                        )),
+                        files_to_write: Vec::new(),
+                    });
+                    if let Some(ref t) = tracker {
+                        t.inc(1);
+                    }
+                    continue;
+                }
+            };
+
+            let dpi = options.dpi.max(1);
+            let render_config = PdfRenderConfig::new()
+                .scale_page_by_factor(dpi as f32 / 72.0)
+                .render_form_data(true)
+                .render_annotations(true);
+
+            let mut files_to_write = Vec::new();
+            let mut failed_page = None;
+
+            for &page_index in &pages_to_render {
+                let page_num = page_index + 1;
+                let page = match document.pages().get(page_index) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        failed_page = Some(format!("Failed to get page {}: {:?}", page_num, e));
+                        break;
+                    }
+                };
+                let img = match page.render_with_config(&render_config) {
+                    Ok(i) => i,
+                    Err(e) => {
+                        failed_page = Some(format!("Failed to render page {}: {:?}", page_num, e));
+                        break;
+                    }
+                };
+                let dynamic_img = img.as_image();
+
+                let stem = sub
+                    .out_path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("output");
+                let ext = sub
+                    .out_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("png");
+                let page_filename = format!("{}_page_{}.{}", stem, page_num, ext);
+                let page_out_path = sub.out_path.with_file_name(page_filename);
+
+                let sub_options = crate::converter::ConvertOptions {
+                    input_path: input_path.clone(),
+                    output_path: page_out_path.clone(),
+                    package: false,
+                    quality: options.quality,
+                    lossless: options.lossless,
+                    overwrite: options.overwrite,
+                    pages: None,
+                    dpi: options.dpi,
+                };
+
+                match encoder.encode(
+                    Format::Pdf,
+                    sub.target_fmt,
+                    None,
+                    Some(&dynamic_img),
+                    &sub_options,
+                ) {
+                    Ok(mut encoded_files) => {
+                        files_to_write.append(&mut encoded_files);
+                    }
+                    Err(e) => {
+                        failed_page = Some(format!("Failed to encode page {}: {}", page_num, e));
+                        break;
+                    }
+                }
+            }
+
+            if let Some(err) = failed_page {
+                let _ = write_tx.send(WritePayload {
+                    input_path: input_path.clone(),
+                    target_fmt: sub.target_fmt,
+                    status: "failed".to_string(),
+                    original_size,
+                    converted_size: 0,
+                    error_message: Some(err),
+                    files_to_write: Vec::new(),
+                });
+            } else {
+                let _ = write_tx.send(WritePayload {
+                    input_path: input_path.clone(),
+                    target_fmt: sub.target_fmt,
+                    status: "success".to_string(),
+                    original_size,
+                    converted_size: 0,
+                    error_message: None,
+                    files_to_write,
+                });
+            }
+
+            if let Some(ref t) = tracker {
+                t.inc(1);
+            }
+        }
+        return;
+    }
+
     let decoded_result = if from_fmt == Format::Svg {
         let opt = resvg::usvg::Options::default();
         resvg::usvg::Tree::from_data(&input_bytes, &opt)
@@ -525,6 +750,8 @@ fn process_file_task(
             quality: options.quality,
             lossless: options.lossless,
             overwrite: options.overwrite,
+            pages: None,
+            dpi: options.dpi,
         };
 
         let encoder: Box<dyn crate::converter::image_conv::Encoder> = match sub.target_fmt {

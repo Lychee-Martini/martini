@@ -70,6 +70,14 @@ pub enum Commands {
         /// Number of parallel worker threads. Defaults to CPU count.
         #[arg(short, long)]
         workers: Option<usize>,
+
+        /// Page range to convert from PDF (e.g. '1,3-5'). Defaults to all pages.
+        #[arg(long)]
+        pages: Option<String>,
+
+        /// Resolution in DPI for PDF rendering (default: 150)
+        #[arg(long, default_value_t = 150)]
+        dpi: u16,
     },
 
     /// List all supported format conversions and their parameters

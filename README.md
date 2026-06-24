@@ -71,6 +71,20 @@ martini convert -i ./images --to webp
 martini convert -i ./images --to both -r --delete-original
 ```
 
+### 4. Convert PDF to Images
+Extract pages of a PDF document to raster image formats (PNG, JPEG, WebP, AVIF) at custom resolutions:
+```bash
+# Convert all pages of a PDF to PNG at default 150 DPI
+martini convert -i report.pdf -o report.png
+
+# Convert specific pages (e.g. 1, 3 to 5) to JPEG at high resolution (300 DPI)
+martini convert -i doc.pdf -o output.jpg --pages "1,3-5" --dpi 300
+
+# Batch convert a folder of PDFs to WebP
+martini convert -i ./pdfs -o ./images --from pdf --to webp
+```
+*Note: Output files are named with page suffixes, e.g., `output_page_1.jpg`, `output_page_2.jpg`.*
+
 ---
 
 ## Agent Integration (Agent Skills)
