@@ -5,7 +5,7 @@ use std::str::FromStr;
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
 
-use martini::cli::ui::{print_report_table, print_setup_panel, CliProgressTracker};
+use martini::cli::ui::{CliProgressTracker, print_report_table, print_setup_panel};
 use martini::cli::{CliArgs, Commands};
 use martini::converter::{self, ConversionResult, ConvertOptions, Format, OutputFileMetadata};
 use martini::error::MartiniError;

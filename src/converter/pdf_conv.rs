@@ -43,7 +43,7 @@ impl PdfConverter {
                 reason: format!("Failed to parse PDF document: {:?}", e),
             })?;
 
-        let total_pages = document.pages().len() as u16;
+        let total_pages = document.pages().len();
         if total_pages == 0 {
             return Err(MartiniError::InvalidInputData {
                 reason: "PDF document has no pages".to_string(),

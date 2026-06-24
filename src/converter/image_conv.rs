@@ -389,19 +389,24 @@ fn generate_favicon(
     let mut output_files = Vec::new();
 
     if options.package {
-        let (dir_path, ico_name) = if options.output_path.is_dir() || options.output_path.extension().is_none() {
-            (options.output_path.clone(), "favicon.ico".to_string())
-        } else {
-            let parent = options.output_path.parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-            let name = options.output_path.file_name()
-                .and_then(|n| n.to_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "favicon.ico".to_string());
-            (parent, name)
-        };
+        let (dir_path, ico_name) =
+            if options.output_path.is_dir() || options.output_path.extension().is_none() {
+                (options.output_path.clone(), "favicon.ico".to_string())
+            } else {
+                let parent = options
+                    .output_path
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+                let name = options
+                    .output_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "favicon.ico".to_string());
+                (parent, name)
+            };
 
         let sizes = [
             (

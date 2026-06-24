@@ -1,6 +1,6 @@
+use crate::converter::batch::{ProgressTracker, TaskResult};
 use indicatif::ProgressBar;
 use std::path::Path;
-use crate::converter::batch::{ProgressTracker, TaskResult};
 
 pub struct CliProgressTracker {
     pub pb: ProgressBar,

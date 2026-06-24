@@ -6,7 +6,7 @@ pub use converter::batch::{
     BatchConvertOptions, BatchResult, ProgressTracker, TaskResult, batch_convert,
 };
 pub use converter::{
-    ConversionResult, ConvertOptions, Format, OutputFileMetadata, convert,
-    FormatCapability, get_supported_formats,
+    ConversionResult, ConvertOptions, Format, FormatCapability, OutputFileMetadata, convert,
+    get_supported_formats,
 };
 pub use error::MartiniError;

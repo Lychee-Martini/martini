@@ -1,8 +1,8 @@
+use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
-use rayon::prelude::*;
 
 use crate::converter::Format;
 use crate::error::MartiniError;
@@ -44,8 +44,6 @@ pub trait ProgressTracker: Send + Sync {
     fn set_message(&self, msg: &str);
     fn inc(&self, delta: u64);
 }
-
-
 
 pub fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> Vec<PathBuf> {
     let mut image_files = Vec::new();
@@ -130,7 +128,7 @@ pub fn batch_convert(
         .par_iter()
         .flat_map(|file_path| {
             let mut results = Vec::new();
-            
+
             if let Some(ref t) = tracker_arc {
                 let filename = file_path
                     .file_name()
@@ -176,7 +174,10 @@ pub fn batch_convert(
                             status: "failed".to_string(),
                             original_size,
                             converted_size: 0,
-                            error_message: Some(format!("Unsupported source format: '{}'", file_ext)),
+                            error_message: Some(format!(
+                                "Unsupported source format: '{}'",
+                                file_ext
+                            )),
                         });
                         if let Some(ref t) = tracker_arc {
                             t.inc(1);
@@ -209,8 +210,8 @@ pub fn batch_convert(
                         out_dir
                             .join(relative)
                             .with_extension(target_fmt.to_string())
-                      }
-                      None => file_path.with_extension(target_fmt.to_string()),
+                    }
+                    None => file_path.with_extension(target_fmt.to_string()),
                 };
 
                 if out_path.exists() && !options.overwrite {
@@ -240,7 +241,8 @@ pub fn batch_convert(
                     dpi: options.dpi,
                 };
 
-                match crate::converter::convert(from_fmt, *target_fmt, &input_bytes, &convert_opts) {
+                match crate::converter::convert(from_fmt, *target_fmt, &input_bytes, &convert_opts)
+                {
                     Ok(conv_res) => {
                         let mut converted_size = 0;
                         for out_file in &conv_res.output_files {

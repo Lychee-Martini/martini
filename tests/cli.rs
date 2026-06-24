@@ -340,12 +340,14 @@ fn test_convert_pdf_to_images() {
 
 #[test]
 fn test_pdfium_thread_safety() {
-    let threads: Vec<_> = (0..3).map(|_| {
-        std::thread::spawn(|| {
-            let mut cmd = Command::cargo_bin("martini").unwrap();
-            cmd.arg("list-formats").assert().success();
+    let threads: Vec<_> = (0..3)
+        .map(|_| {
+            std::thread::spawn(|| {
+                let mut cmd = Command::cargo_bin("martini").unwrap();
+                cmd.arg("list-formats").assert().success();
+            })
         })
-    }).collect();
+        .collect();
     for t in threads {
         t.join().unwrap();
     }
@@ -371,7 +373,7 @@ fn test_favicon_package_smart_path() {
     // Ensure primary ICO is at the exact path
     assert!(output_file_path.exists());
     assert!(output_file_path.is_file());
-    
+
     // Companion files should be in the same folder as my_icon.ico
     let parent_dir = output_file_path.parent().unwrap();
     assert!(parent_dir.join("favicon-16x16.png").exists());

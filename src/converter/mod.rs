@@ -85,20 +85,31 @@ pub struct FormatCapability {
 
 pub fn get_supported_formats() -> Vec<FormatCapability> {
     let mut list = Vec::new();
-    
+
     let mut fav_params = std::collections::HashMap::new();
     fav_params.insert("package".to_string(), "boolean (generates a package of optimized PNGs, manifest, and HTML copy-paste snippets alongside the .ico file)".to_string());
     list.push(FormatCapability {
         from: "svg, png, jpg, jpeg, webp, avif".to_string(),
         to: "favicon".to_string(),
-        description: "Convert an SVG or raster image to a Chrome favicon (.ico or full favicon package)".to_string(),
+        description:
+            "Convert an SVG or raster image to a Chrome favicon (.ico or full favicon package)"
+                .to_string(),
         parameters: fav_params,
     });
 
     let mut png_params = std::collections::HashMap::new();
-    png_params.insert("overwrite".to_string(), "boolean (default false)".to_string());
-    png_params.insert("delete_original".to_string(), "boolean (default false)".to_string());
-    png_params.insert("recursive".to_string(), "boolean (default false)".to_string());
+    png_params.insert(
+        "overwrite".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    png_params.insert(
+        "delete_original".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    png_params.insert(
+        "recursive".to_string(),
+        "boolean (default false)".to_string(),
+    );
     png_params.insert("workers".to_string(), "integer (optional)".to_string());
     list.push(FormatCapability {
         from: "svg, png, jpg, jpeg, webp, avif".to_string(),
@@ -108,10 +119,22 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
     });
 
     let mut jpg_params = std::collections::HashMap::new();
-    jpg_params.insert("quality".to_string(), "integer (1-100, default 80)".to_string());
-    jpg_params.insert("overwrite".to_string(), "boolean (default false)".to_string());
-    jpg_params.insert("delete_original".to_string(), "boolean (default false)".to_string());
-    jpg_params.insert("recursive".to_string(), "boolean (default false)".to_string());
+    jpg_params.insert(
+        "quality".to_string(),
+        "integer (1-100, default 80)".to_string(),
+    );
+    jpg_params.insert(
+        "overwrite".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    jpg_params.insert(
+        "delete_original".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    jpg_params.insert(
+        "recursive".to_string(),
+        "boolean (default false)".to_string(),
+    );
     jpg_params.insert("workers".to_string(), "integer (optional)".to_string());
     list.push(FormatCapability {
         from: "svg, png, jpg, jpeg, webp, avif".to_string(),
@@ -121,11 +144,26 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
     });
 
     let mut webp_params = std::collections::HashMap::new();
-    webp_params.insert("quality".to_string(), "integer (1-100, default 80)".to_string());
-    webp_params.insert("lossless".to_string(), "boolean (default false)".to_string());
-    webp_params.insert("overwrite".to_string(), "boolean (default false)".to_string());
-    webp_params.insert("delete_original".to_string(), "boolean (default false)".to_string());
-    webp_params.insert("recursive".to_string(), "boolean (default false)".to_string());
+    webp_params.insert(
+        "quality".to_string(),
+        "integer (1-100, default 80)".to_string(),
+    );
+    webp_params.insert(
+        "lossless".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    webp_params.insert(
+        "overwrite".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    webp_params.insert(
+        "delete_original".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    webp_params.insert(
+        "recursive".to_string(),
+        "boolean (default false)".to_string(),
+    );
     webp_params.insert("workers".to_string(), "integer (optional)".to_string());
     list.push(FormatCapability {
         from: "svg, png, jpg, jpeg, webp, avif".to_string(),
@@ -135,11 +173,26 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
     });
 
     let mut avif_params = std::collections::HashMap::new();
-    avif_params.insert("quality".to_string(), "integer (1-100, default 80)".to_string());
-    avif_params.insert("lossless".to_string(), "boolean (default false)".to_string());
-    avif_params.insert("overwrite".to_string(), "boolean (default false)".to_string());
-    avif_params.insert("delete_original".to_string(), "boolean (default false)".to_string());
-    avif_params.insert("recursive".to_string(), "boolean (default false)".to_string());
+    avif_params.insert(
+        "quality".to_string(),
+        "integer (1-100, default 80)".to_string(),
+    );
+    avif_params.insert(
+        "lossless".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    avif_params.insert(
+        "overwrite".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    avif_params.insert(
+        "delete_original".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    avif_params.insert(
+        "recursive".to_string(),
+        "boolean (default false)".to_string(),
+    );
     avif_params.insert("workers".to_string(), "integer (optional)".to_string());
     list.push(FormatCapability {
         from: "svg, png, jpg, jpeg, webp, avif".to_string(),
@@ -149,11 +202,26 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
     });
 
     let mut both_params = std::collections::HashMap::new();
-    both_params.insert("quality".to_string(), "integer (1-100, default 80)".to_string());
-    both_params.insert("lossless".to_string(), "boolean (default false)".to_string());
-    both_params.insert("overwrite".to_string(), "boolean (default false)".to_string());
-    both_params.insert("delete_original".to_string(), "boolean (default false)".to_string());
-    both_params.insert("recursive".to_string(), "boolean (default false)".to_string());
+    both_params.insert(
+        "quality".to_string(),
+        "integer (1-100, default 80)".to_string(),
+    );
+    both_params.insert(
+        "lossless".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    both_params.insert(
+        "overwrite".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    both_params.insert(
+        "delete_original".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    both_params.insert(
+        "recursive".to_string(),
+        "boolean (default false)".to_string(),
+    );
     both_params.insert("workers".to_string(), "integer (optional)".to_string());
     list.push(FormatCapability {
         from: "svg, png, jpg, jpeg, webp, avif".to_string(),
@@ -163,12 +231,30 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
     });
 
     let mut pdf_params = std::collections::HashMap::new();
-    pdf_params.insert("pages".to_string(), "string (comma-separated page numbers or ranges, e.g. '1,3-5')".to_string());
-    pdf_params.insert("dpi".to_string(), "integer (rendering DPI, default 150)".to_string());
-    pdf_params.insert("quality".to_string(), "integer (1-100, default 80)".to_string());
-    pdf_params.insert("lossless".to_string(), "boolean (default false)".to_string());
-    pdf_params.insert("overwrite".to_string(), "boolean (default false)".to_string());
-    pdf_params.insert("delete_original".to_string(), "boolean (default false)".to_string());
+    pdf_params.insert(
+        "pages".to_string(),
+        "string (comma-separated page numbers or ranges, e.g. '1,3-5')".to_string(),
+    );
+    pdf_params.insert(
+        "dpi".to_string(),
+        "integer (rendering DPI, default 150)".to_string(),
+    );
+    pdf_params.insert(
+        "quality".to_string(),
+        "integer (1-100, default 80)".to_string(),
+    );
+    pdf_params.insert(
+        "lossless".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    pdf_params.insert(
+        "overwrite".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    pdf_params.insert(
+        "delete_original".to_string(),
+        "boolean (default false)".to_string(),
+    );
     list.push(FormatCapability {
         from: "pdf".to_string(),
         to: "png, jpg, jpeg, webp, avif".to_string(),
