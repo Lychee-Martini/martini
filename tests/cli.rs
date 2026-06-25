@@ -379,3 +379,45 @@ fn test_favicon_package_smart_path() {
     assert!(parent_dir.join("favicon-16x16.png").exists());
     assert!(parent_dir.join("site.webmanifest").exists());
 }
+
+#[test]
+fn test_convert_md_to_docx() {
+    let temp_dir = tempdir().unwrap();
+    let output_path = temp_dir.path().join("output.docx");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("--from")
+        .arg("md")
+        .arg("--to")
+        .arg("docx")
+        .arg("-i")
+        .arg("tests/fixtures/sample.md")
+        .arg("-o")
+        .arg(&output_path)
+        .assert()
+        .success();
+
+    assert!(output_path.exists());
+    let metadata = fs::metadata(&output_path).unwrap();
+    assert!(metadata.len() > 0);
+}
+
+#[test]
+fn test_convert_md_to_docx_auto_detect() {
+    let temp_dir = tempdir().unwrap();
+    let output_path = temp_dir.path().join("output.docx");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg("tests/fixtures/sample.md")
+        .arg("-o")
+        .arg(&output_path)
+        .assert()
+        .success();
+
+    assert!(output_path.exists());
+    let metadata = fs::metadata(&output_path).unwrap();
+    assert!(metadata.len() > 0);
+}
