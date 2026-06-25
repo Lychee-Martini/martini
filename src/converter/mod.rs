@@ -314,7 +314,10 @@ pub fn convert(
         });
     }
 
-    if from == Format::Pdf {
+    if from == Format::Md && to == Format::Docx {
+        let converter = md_conv::MarkdownConverter;
+        converter.convert_markdown(input_data, options)
+    } else if from == Format::Pdf {
         let converter = pdf_conv::PdfConverter;
         converter.convert_pdf(to, input_data, options)
     } else {
