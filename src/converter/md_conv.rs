@@ -55,6 +55,7 @@ impl MarkdownConverter {
         parser_options.insert(Options::ENABLE_TABLES);
         parser_options.insert(Options::ENABLE_STRIKETHROUGH);
         parser_options.insert(Options::ENABLE_TASKLISTS);
+        parser_options.insert(Options::ENABLE_MATH);
         
         let parser = Parser::new_ext(markdown_str, parser_options);
         
@@ -313,6 +314,18 @@ impl MarkdownConverter {
                     if let Some(ref mut p) = current_para {
                         p.elements.push(ParaElement::Run(Run::new().add_break(BreakType::TextWrapping)));
                     }
+                }
+                Event::InlineMath(math) => {
+                    let run = Run::new().add_text(math.to_string()).italic().color("4A154B");
+                    if let Some(ref mut p) = current_para {
+                        p.elements.push(ParaElement::Run(run));
+                    }
+                }
+                Event::DisplayMath(math) => {
+                    let docx_p = Paragraph::new()
+                        .align(AlignmentType::Center)
+                        .add_run(Run::new().add_text(math.to_string()).italic().color("4A154B").size(24));
+                    doc = doc.add_paragraph(docx_p);
                 }
                 _ => {}
             }

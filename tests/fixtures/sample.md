@@ -14,3 +14,6 @@ This is a paragraph with **bold** and *italic* text.
 | Col 1 | Col 2 |
 | --- | --- |
 | Cell A | Cell B |
+
+$$DCF = \sum_{t=1}^{n} \frac{FCF_t}{(1+WACC)^t} + \frac{FCF_n \times (1+g)}{(WACC - g) \times (1+WACC)^n}$$
+
