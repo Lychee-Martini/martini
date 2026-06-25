@@ -106,14 +106,50 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             pages,
             dpi,
         } => {
-            if !input.exists() {
-                return Err(MartiniError::InputFileNotFound {
-                    path: input.to_string_lossy().to_string(),
-                });
-            }
+            let input_str = input.to_string_lossy();
+            let is_glob = is_glob_pattern(&input);
 
-            // Determine if we're doing a directory conversion
-            let is_dir = input.is_dir();
+            let (glob_files, is_dir, input_resolved) = if is_glob {
+                let pattern_normalized = input_str.replace('\\', "/");
+                let mut matches = Vec::new();
+                for entry in glob::glob(&pattern_normalized).map_err(|e| MartiniError::InvalidInputData {
+                    reason: format!("Invalid glob pattern: {}", e),
+                })? {
+                    let path = entry.map_err(|e| MartiniError::Io(e.into_error()))?;
+                    if path.is_file() {
+                        matches.push(path);
+                    }
+                }
+
+                if matches.is_empty() {
+                    return Err(MartiniError::InputFileNotFound {
+                        path: input_str.into_owned(),
+                    });
+                }
+
+                if matches.len() == 1 {
+                    (None, false, matches[0].clone())
+                } else {
+                    if let Some(ref out_path) = output {
+                        if out_path.is_file() || (!out_path.exists() && out_path.extension().is_some()) {
+                            return Err(MartiniError::InvalidInputData {
+                                reason: "Output path must be a directory when converting multiple files".to_string(),
+                            });
+                        }
+                    }
+
+                    let base_dir = get_glob_base(&pattern_normalized);
+                    (Some(matches), true, base_dir)
+                }
+            } else {
+                if !input.exists() {
+                    return Err(MartiniError::InputFileNotFound {
+                        path: input.to_string_lossy().to_string(),
+                    });
+                }
+                let is_dir = input.is_dir();
+                (None, is_dir, input.clone())
+            };
 
             // Set up rayon thread pool if custom workers requested
             if let Some(w) = workers {
@@ -123,17 +159,17 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             }
 
             // Resolve output formats (targets)
-            let is_svg = input
+            let is_svg = input_resolved
                 .extension()
                 .and_then(|e| e.to_str())
                 .map(|s| s.to_lowercase() == "svg")
                 .unwrap_or(false);
-            let is_pdf = input
+            let is_pdf = input_resolved
                 .extension()
                 .and_then(|e| e.to_str())
                 .map(|s| s.to_lowercase() == "pdf")
                 .unwrap_or(false);
-            let is_md = input
+            let is_md = input_resolved
                 .extension()
                 .and_then(|e| e.to_str())
                 .map(|s| {
@@ -215,7 +251,10 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     println!("🔍 Scanning for images...");
                 }
 
-                let files = martini::converter::batch::get_all_images(&input, recursive, &from);
+                let files = match glob_files {
+                    Some(ref f) => f.clone(),
+                    None => martini::converter::batch::get_all_images(&input_resolved, recursive, &from),
+                };
                 if files.is_empty() {
                     if args.json {
                         println!("[]");
@@ -247,7 +286,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 let tracker = Arc::new(CliProgressTracker { pb: pb.clone() });
 
                 let batch_options = BatchConvertOptions {
-                    input_dir: input.clone(),
+                    input_dir: input_resolved.clone(),
                     output_dir: output.clone(),
                     from_filter: from.clone(),
                     targets: targets.clone(),
@@ -259,6 +298,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     workers,
                     pages: pages.clone(),
                     dpi,
+                    files: glob_files,
                 };
 
                 let batch_result = batch_convert(batch_options, Some(tracker))?;
@@ -285,7 +325,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             } else {
                 // Single file conversion
                 let from_fmt = if from == "auto" {
-                    let file_ext = input
+                    let file_ext = input_resolved
                         .extension()
                         .and_then(|e| e.to_str())
                         .unwrap_or("")
@@ -303,7 +343,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     })?
                 };
 
-                let input_data = std::fs::read(&input)?;
+                let input_data = std::fs::read(&input_resolved)?;
                 if input_data.is_empty() {
                     return Err(MartiniError::InvalidInputData {
                         reason: "Input file is empty".to_string(),
@@ -316,7 +356,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     let out_path = match &output {
                         Some(out) => {
                             if out.is_dir() {
-                                let filename = input.file_name().ok_or_else(|| {
+                                let filename = input_resolved.file_name().ok_or_else(|| {
                                     MartiniError::InvalidInputData {
                                         reason: "Input path has no filename".to_string(),
                                     }
@@ -328,7 +368,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                 out.clone()
                             }
                         }
-                        None => input.with_extension(target_fmt.to_string()),
+                        None => input_resolved.with_extension(target_fmt.to_string()),
                     };
 
                     if out_path.exists() && !overwrite {
@@ -342,7 +382,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     }
 
                     let options = ConvertOptions {
-                        input_path: input.clone(),
+                        input_path: input_resolved.clone(),
                         output_path: out_path.clone(),
                         package,
                         quality,
@@ -363,7 +403,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         .iter()
                         .all(|f| !f.description.contains("failed"))
                 {
-                    std::fs::remove_file(&input)?;
+                    std::fs::remove_file(&input_resolved)?;
                 }
 
                 let final_result = ConversionResult {
@@ -399,5 +439,32 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 Ok(0)
             }
         }
+    }
+}
+
+fn is_glob_pattern(path: &std::path::Path) -> bool {
+    let s = path.to_string_lossy();
+    s.contains('*') || s.contains('?') || (s.contains('[') && s.contains(']'))
+}
+
+fn get_glob_base(pattern: &str) -> std::path::PathBuf {
+    let mut base_str = String::new();
+    for char in pattern.chars() {
+        if char == '*' || char == '?' || char == '[' {
+            break;
+        }
+        base_str.push(char);
+    }
+    let base_path = std::path::PathBuf::from(base_str);
+    if base_path.is_dir() {
+        base_path
+    } else if let Some(parent) = base_path.parent() {
+        if parent.as_os_str().is_empty() {
+            std::path::PathBuf::from(".")
+        } else {
+            parent.to_path_buf()
+        }
+    } else {
+        std::path::PathBuf::from(".")
     }
 }

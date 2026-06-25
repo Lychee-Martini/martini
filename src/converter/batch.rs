@@ -31,6 +31,7 @@ pub struct BatchConvertOptions {
     pub workers: Option<usize>,
     pub pages: Option<String>,
     pub dpi: u16,
+    pub files: Option<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -105,7 +106,12 @@ pub fn batch_convert(
         });
     }
 
-    let files = get_all_images(&options.input_dir, options.recursive, &options.from_filter);
+    let canonical_input_dir = std::fs::canonicalize(&options.input_dir)?;
+
+    let files = match &options.files {
+        Some(f) => f.clone(),
+        None => get_all_images(&options.input_dir, options.recursive, &options.from_filter),
+    };
     if files.is_empty() {
         return Ok(BatchResult {
             tasks: Vec::new(),
@@ -190,7 +196,25 @@ pub fn batch_convert(
             for target_fmt in &options.targets {
                 let out_path = match &options.output_dir {
                     Some(out_dir) => {
-                        let relative = match file_path.strip_prefix(&options.input_dir) {
+                        let canonical_file = match std::fs::canonicalize(file_path) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                results.push(TaskResult {
+                                    input_path: file_path.to_string_lossy().to_string(),
+                                    output_path: None,
+                                    status: "failed".to_string(),
+                                    original_size,
+                                    converted_size: 0,
+                                    error_message: Some(format!("Failed to canonicalize path: {}", e)),
+                                });
+                                if let Some(ref t) = tracker_arc {
+                                    t.inc(1);
+                                }
+                                continue;
+                            }
+                        };
+
+                        let relative = match canonical_file.strip_prefix(&canonical_input_dir) {
                             Ok(rel) => rel,
                             Err(e) => {
                                 results.push(TaskResult {
