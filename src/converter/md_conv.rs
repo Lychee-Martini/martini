@@ -135,7 +135,8 @@ impl MarkdownConverter {
                         } else {
                             "•  ".to_string()
                         };
-                        let elements = vec![ParaElement::Run(Box::new(Run::new().add_text(prefix)))];
+                        let elements =
+                            vec![ParaElement::Run(Box::new(Run::new().add_text(prefix)))];
                         current_para = Some(ParagraphState {
                             elements,
                             heading_level: None,
