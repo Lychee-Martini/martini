@@ -205,7 +205,10 @@ pub fn batch_convert(
                                     status: "failed".to_string(),
                                     original_size,
                                     converted_size: 0,
-                                    error_message: Some(format!("Failed to canonicalize path: {}", e)),
+                                    error_message: Some(format!(
+                                        "Failed to canonicalize path: {}",
+                                        e
+                                    )),
                                 });
                                 if let Some(ref t) = tracker_arc {
                                     t.inc(1);

@@ -133,8 +133,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     (None, false, matches[0].clone())
                 } else {
                     if output.as_ref().is_some_and(|out_path| {
-                        out_path.is_file()
-                            || (!out_path.exists() && out_path.extension().is_some())
+                        out_path.is_file() || (!out_path.exists() && out_path.extension().is_some())
                     }) {
                         return Err(MartiniError::InvalidInputData {
                             reason:
