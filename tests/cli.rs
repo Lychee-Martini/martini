@@ -421,3 +421,58 @@ fn test_convert_md_to_docx_auto_detect() {
     let metadata = fs::metadata(&output_path).unwrap();
     assert!(metadata.len() > 0);
 }
+
+#[test]
+fn test_convert_glob_pattern() {
+    use image::{ImageBuffer, Rgba};
+    let temp_dir = tempdir().unwrap();
+    let dir_path = temp_dir.path();
+
+    // Create valid test images
+    let png_img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
+    png_img.save(dir_path.join("file1.png")).unwrap();
+    png_img.save(dir_path.join("file2.png")).unwrap();
+    fs::write(dir_path.join("file3.txt"), b"dummy txt").unwrap();
+
+    let pattern = dir_path.join("*.png");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg(pattern.to_string_lossy().to_string())
+        .arg("--to")
+        .arg("avif")
+        .assert()
+        .success();
+
+    // Verify converted files exist
+    assert!(dir_path.join("file1.avif").exists());
+    assert!(dir_path.join("file2.avif").exists());
+    assert!(!dir_path.join("file3.avif").exists());
+}
+
+#[test]
+fn test_convert_glob_pattern_invalid_output() {
+    use image::{ImageBuffer, Rgba};
+    let temp_dir = tempdir().unwrap();
+    let dir_path = temp_dir.path();
+
+    let png_img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(10, 10);
+    png_img.save(dir_path.join("file1.png")).unwrap();
+    png_img.save(dir_path.join("file2.png")).unwrap();
+
+    let pattern = dir_path.join("*.png");
+    let invalid_output = dir_path.join("single_output.avif");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg(pattern.to_string_lossy().to_string())
+        .arg("-o")
+        .arg(invalid_output)
+        .arg("--to")
+        .arg("avif")
+        .assert()
+        .code(3) // InvalidInputData
+        .stderr(predicate::str::contains("Output path must be a directory"));
+}
