@@ -56,8 +56,7 @@ impl MarkdownConverter {
         parser_options.insert(Options::ENABLE_TASKLISTS);
         parser_options.insert(Options::ENABLE_MATH);
 
-        let preprocessed = preprocess_markdown(markdown_str);
-        let parser = Parser::new_ext(&preprocessed, parser_options);
+        let parser = Parser::new_ext(markdown_str, parser_options);
 
         let mut doc = Docx::new();
 
@@ -345,16 +344,10 @@ impl MarkdownConverter {
                     }
                 }
                 Event::InlineMath(math) => {
-                    let mut run = Run::new()
+                    let run = Run::new()
                         .add_text(math.to_string())
                         .italic()
                         .color("4A154B");
-                    if style.bold {
-                        run = run.bold();
-                    }
-                    if style.strikethrough {
-                        run = run.strike();
-                    }
                     if let Some(ref mut p) = current_para {
                         p.elements.push(ParaElement::Run(Box::new(run)));
                     }
@@ -366,14 +359,6 @@ impl MarkdownConverter {
                             .italic()
                             .color("4A154B")
                             .size(24),
-                    );
-                    doc = doc.add_paragraph(docx_p);
-                }
-                Event::Rule => {
-                    let docx_p = Paragraph::new().align(AlignmentType::Center).add_run(
-                        Run::new()
-                            .add_text("—".repeat(40))
-                            .color("CCCCCC"),
                     );
                     doc = doc.add_paragraph(docx_p);
                 }
@@ -445,52 +430,4 @@ fn build_paragraph(p: ParagraphState) -> Paragraph {
     }
 
     docx_p
-}
-
-fn preprocess_markdown(raw: &str) -> String {
-    let mut result = String::with_capacity(raw.len());
-    let mut chars = raw.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            if let Some(&next_c) = chars.peek() {
-                if next_c.is_ascii_punctuation() {
-                    result.push(next_c);
-                    chars.next(); // consume the escaped character
-                    continue;
-                }
-            }
-        }
-        result.push(c);
-    }
-    result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_preprocess_markdown_escapes() {
-        let input = r#"\*\*标题：别被“安全边际”骗了：为什么用DCF给标普500批量估值是个伪命题？\*\*
-
-\### 一、 绝对的公式，绝对的主观
-
-\---
-
-$$DCF = \\sum\_{t=1}^{n} \\frac{FCF\_t}{(1+WACC)^t} + \\frac{FCF\_n \\times (1+g)}{(WACC - g) \\times (1+WACC)^n}$$
-
-\* \*\*金融股的“死穴”：\*\* 对于金融机构来说...
-"#;
-        let expected = r#"**标题：别被“安全边际”骗了：为什么用DCF给标普500批量估值是个伪命题？**
-
-### 一、 绝对的公式，绝对的主观
-
----
-
-$$DCF = \sum_{t=1}^{n} \frac{FCF_t}{(1+WACC)^t} + \frac{FCF_n \times (1+g)}{(WACC - g) \times (1+WACC)^n}$$
-
-* **金融股的“死穴”：** 对于金融机构来说...
-"#;
-        assert_eq!(preprocess_markdown(input), expected);
-    }
 }
