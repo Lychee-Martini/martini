@@ -112,9 +112,11 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             let (glob_files, is_dir, input_resolved) = if is_glob {
                 let pattern_normalized = input_str.replace('\\', "/");
                 let mut matches = Vec::new();
-                for entry in glob::glob(&pattern_normalized).map_err(|e| MartiniError::InvalidInputData {
-                    reason: format!("Invalid glob pattern: {}", e),
-                })? {
+                for entry in
+                    glob::glob(&pattern_normalized).map_err(|e| MartiniError::InvalidInputData {
+                        reason: format!("Invalid glob pattern: {}", e),
+                    })?
+                {
                     let path = entry.map_err(|e| MartiniError::Io(e.into_error()))?;
                     if path.is_file() {
                         matches.push(path);
@@ -130,12 +132,15 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 if matches.len() == 1 {
                     (None, false, matches[0].clone())
                 } else {
-                    if let Some(ref out_path) = output {
-                        if out_path.is_file() || (!out_path.exists() && out_path.extension().is_some()) {
-                            return Err(MartiniError::InvalidInputData {
-                                reason: "Output path must be a directory when converting multiple files".to_string(),
-                            });
-                        }
+                    if output.as_ref().is_some_and(|out_path| {
+                        out_path.is_file()
+                            || (!out_path.exists() && out_path.extension().is_some())
+                    }) {
+                        return Err(MartiniError::InvalidInputData {
+                            reason:
+                                "Output path must be a directory when converting multiple files"
+                                    .to_string(),
+                        });
                     }
 
                     let base_dir = get_glob_base(&pattern_normalized);
@@ -253,7 +258,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
 
                 let files = match glob_files {
                     Some(ref f) => f.clone(),
-                    None => martini::converter::batch::get_all_images(&input_resolved, recursive, &from),
+                    None => {
+                        martini::converter::batch::get_all_images(&input_resolved, recursive, &from)
+                    }
                 };
                 if files.is_empty() {
                     if args.json {
