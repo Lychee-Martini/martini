@@ -5,6 +5,7 @@ use std::str::FromStr;
 pub mod batch;
 pub mod image_conv;
 pub mod pdf_conv;
+pub mod md_conv;
 
 #[derive(Debug, Clone)]
 pub struct EncodedFile {
