@@ -7,7 +7,7 @@ pub struct MarkdownConverter;
 
 #[derive(Debug, Clone)]
 enum ParaElement {
-    Run(Run),
+    Run(Box<Run>),
     Link(Hyperlink),
 }
 
@@ -81,7 +81,7 @@ impl MarkdownConverter {
                             elements: Vec::new(),
                             heading_level: None,
                             is_blockquote: !list_stack.is_empty()
-                                && current_para.as_ref().map_or(false, |p| p.is_blockquote),
+                                && current_para.as_ref().is_some_and(|p| p.is_blockquote),
                             is_list_item: false,
                             list_indent: list_stack.len(),
                         });
@@ -135,8 +135,7 @@ impl MarkdownConverter {
                         } else {
                             "•  ".to_string()
                         };
-                        let mut elements = Vec::new();
-                        elements.push(ParaElement::Run(Run::new().add_text(prefix)));
+                        let elements = vec![ParaElement::Run(Box::new(Run::new().add_text(prefix)))];
                         current_para = Some(ParagraphState {
                             elements,
                             heading_level: None,
@@ -175,9 +174,9 @@ impl MarkdownConverter {
                             format!("[Image: {} - {}]", title, dest_url)
                         };
                         if let Some(ref mut p) = current_para {
-                            p.elements.push(ParaElement::Run(
+                            p.elements.push(ParaElement::Run(Box::new(
                                 Run::new().add_text(text).italic().color("888888"),
-                            ));
+                            )));
                         }
                     }
                     Tag::CodeBlock(_) => {
@@ -320,7 +319,7 @@ impl MarkdownConverter {
                                 .add_run(run.color("0000FF").underline("single"));
                             p.elements.push(ParaElement::Link(hl));
                         } else {
-                            p.elements.push(ParaElement::Run(run));
+                            p.elements.push(ParaElement::Run(Box::new(run)));
                         }
                     }
                 }
@@ -332,15 +331,15 @@ impl MarkdownConverter {
                                 .add_run(run.underline("single"));
                             p.elements.push(ParaElement::Link(hl));
                         } else {
-                            p.elements.push(ParaElement::Run(run));
+                            p.elements.push(ParaElement::Run(Box::new(run)));
                         }
                     }
                 }
                 Event::SoftBreak | Event::HardBreak => {
                     if let Some(ref mut p) = current_para {
-                        p.elements.push(ParaElement::Run(
+                        p.elements.push(ParaElement::Run(Box::new(
                             Run::new().add_break(BreakType::TextWrapping),
-                        ));
+                        )));
                     }
                 }
                 Event::InlineMath(math) => {
@@ -349,7 +348,7 @@ impl MarkdownConverter {
                         .italic()
                         .color("4A154B");
                     if let Some(ref mut p) = current_para {
-                        p.elements.push(ParaElement::Run(run));
+                        p.elements.push(ParaElement::Run(Box::new(run)));
                     }
                 }
                 Event::DisplayMath(math) => {
@@ -405,7 +404,8 @@ fn build_paragraph(p: ParagraphState) -> Paragraph {
 
     for elem in p.elements {
         match elem {
-            ParaElement::Run(mut r) => {
+            ParaElement::Run(r) => {
+                let mut r = *r;
                 if let Some(level) = p.heading_level {
                     let size = match level {
                         1 => 36,
