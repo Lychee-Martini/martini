@@ -1,7 +1,7 @@
 use crate::converter::{ConversionResult, ConvertOptions, Format, OutputFileMetadata};
 use crate::error::MartiniError;
 use docx_rs::*;
-use pulldown_cmark::{Event, Parser, Tag, TagEnd, Options};
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 pub struct MarkdownConverter;
 
@@ -45,22 +45,21 @@ impl MarkdownConverter {
         input_data: &[u8],
         options: &ConvertOptions,
     ) -> Result<ConversionResult, MartiniError> {
-        let markdown_str = std::str::from_utf8(input_data).map_err(|e| {
-            MartiniError::InvalidInputData {
+        let markdown_str =
+            std::str::from_utf8(input_data).map_err(|e| MartiniError::InvalidInputData {
                 reason: format!("Input is not valid UTF-8: {}", e),
-            }
-        })?;
+            })?;
 
         let mut parser_options = Options::empty();
         parser_options.insert(Options::ENABLE_TABLES);
         parser_options.insert(Options::ENABLE_STRIKETHROUGH);
         parser_options.insert(Options::ENABLE_TASKLISTS);
         parser_options.insert(Options::ENABLE_MATH);
-        
+
         let parser = Parser::new_ext(markdown_str, parser_options);
-        
+
         let mut doc = Docx::new();
-        
+
         let mut style = StyleState {
             bold: false,
             italic: false,
@@ -68,12 +67,12 @@ impl MarkdownConverter {
             is_code: false,
             link: None,
         };
-        
+
         let mut current_para: Option<ParagraphState> = None;
         let mut list_stack: Vec<ListState> = Vec::new();
         let mut table_state: Option<TableState> = None;
         let mut in_code_block = false;
-        
+
         for event in parser {
             match event {
                 Event::Start(tag) => match tag {
@@ -81,7 +80,8 @@ impl MarkdownConverter {
                         current_para = Some(ParagraphState {
                             elements: Vec::new(),
                             heading_level: None,
-                            is_blockquote: !list_stack.is_empty() && current_para.as_ref().map_or(false, |p| p.is_blockquote),
+                            is_blockquote: !list_stack.is_empty()
+                                && current_para.as_ref().map_or(false, |p| p.is_blockquote),
                             is_list_item: false,
                             list_indent: list_stack.len(),
                         });
@@ -166,14 +166,18 @@ impl MarkdownConverter {
                     Tag::Emphasis => style.italic = true,
                     Tag::Strikethrough => style.strikethrough = true,
                     Tag::Link { dest_url, .. } => style.link = Some(dest_url.to_string()),
-                    Tag::Image { dest_url, title, .. } => {
+                    Tag::Image {
+                        dest_url, title, ..
+                    } => {
                         let text = if title.is_empty() {
                             format!("[Image: {}]", dest_url)
                         } else {
                             format!("[Image: {} - {}]", title, dest_url)
                         };
                         if let Some(ref mut p) = current_para {
-                            p.elements.push(ParaElement::Run(Run::new().add_text(text).italic().color("888888")));
+                            p.elements.push(ParaElement::Run(
+                                Run::new().add_text(text).italic().color("888888"),
+                            ));
                         }
                     }
                     Tag::CodeBlock(_) => {
@@ -213,30 +217,42 @@ impl MarkdownConverter {
                     TagEnd::Table => {
                         if let Some(ts) = table_state.take() {
                             let borders = TableBorders::new()
-                                .set(TableBorder::new(TableBorderPosition::Top)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"))
-                                .set(TableBorder::new(TableBorderPosition::Bottom)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"))
-                                .set(TableBorder::new(TableBorderPosition::Left)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"))
-                                .set(TableBorder::new(TableBorderPosition::Right)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"))
-                                .set(TableBorder::new(TableBorderPosition::InsideH)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"))
-                                .set(TableBorder::new(TableBorderPosition::InsideV)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"));
+                                .set(
+                                    TableBorder::new(TableBorderPosition::Top)
+                                        .border_type(BorderType::Single)
+                                        .size(4)
+                                        .color("CCCCCC"),
+                                )
+                                .set(
+                                    TableBorder::new(TableBorderPosition::Bottom)
+                                        .border_type(BorderType::Single)
+                                        .size(4)
+                                        .color("CCCCCC"),
+                                )
+                                .set(
+                                    TableBorder::new(TableBorderPosition::Left)
+                                        .border_type(BorderType::Single)
+                                        .size(4)
+                                        .color("CCCCCC"),
+                                )
+                                .set(
+                                    TableBorder::new(TableBorderPosition::Right)
+                                        .border_type(BorderType::Single)
+                                        .size(4)
+                                        .color("CCCCCC"),
+                                )
+                                .set(
+                                    TableBorder::new(TableBorderPosition::InsideH)
+                                        .border_type(BorderType::Single)
+                                        .size(4)
+                                        .color("CCCCCC"),
+                                )
+                                .set(
+                                    TableBorder::new(TableBorderPosition::InsideV)
+                                        .border_type(BorderType::Single)
+                                        .size(4)
+                                        .color("CCCCCC"),
+                                );
                             let table = Table::new(ts.rows).set_borders(borders);
                             doc = doc.add_table(table);
                         }
@@ -284,15 +300,24 @@ impl MarkdownConverter {
                     if in_code_block {
                         run = run.color("333333");
                     } else {
-                        if style.bold { run = run.bold(); }
-                        if style.italic { run = run.italic(); }
-                        if style.strikethrough { run = run.strike(); }
-                        if style.is_code { run = run.color("A71D5D"); }
+                        if style.bold {
+                            run = run.bold();
+                        }
+                        if style.italic {
+                            run = run.italic();
+                        }
+                        if style.strikethrough {
+                            run = run.strike();
+                        }
+                        if style.is_code {
+                            run = run.color("A71D5D");
+                        }
                     }
-                    
+
                     if let Some(ref mut p) = current_para {
                         if let Some(ref url) = style.link {
-                            let hl = Hyperlink::new(url, HyperlinkType::External).add_run(run.color("0000FF").underline("single"));
+                            let hl = Hyperlink::new(url, HyperlinkType::External)
+                                .add_run(run.color("0000FF").underline("single"));
                             p.elements.push(ParaElement::Link(hl));
                         } else {
                             p.elements.push(ParaElement::Run(run));
@@ -303,7 +328,8 @@ impl MarkdownConverter {
                     let run = Run::new().add_text(code.to_string()).color("A71D5D");
                     if let Some(ref mut p) = current_para {
                         if let Some(ref url) = style.link {
-                            let hl = Hyperlink::new(url, HyperlinkType::External).add_run(run.underline("single"));
+                            let hl = Hyperlink::new(url, HyperlinkType::External)
+                                .add_run(run.underline("single"));
                             p.elements.push(ParaElement::Link(hl));
                         } else {
                             p.elements.push(ParaElement::Run(run));
@@ -312,39 +338,47 @@ impl MarkdownConverter {
                 }
                 Event::SoftBreak | Event::HardBreak => {
                     if let Some(ref mut p) = current_para {
-                        p.elements.push(ParaElement::Run(Run::new().add_break(BreakType::TextWrapping)));
+                        p.elements.push(ParaElement::Run(
+                            Run::new().add_break(BreakType::TextWrapping),
+                        ));
                     }
                 }
                 Event::InlineMath(math) => {
-                    let run = Run::new().add_text(math.to_string()).italic().color("4A154B");
+                    let run = Run::new()
+                        .add_text(math.to_string())
+                        .italic()
+                        .color("4A154B");
                     if let Some(ref mut p) = current_para {
                         p.elements.push(ParaElement::Run(run));
                     }
                 }
                 Event::DisplayMath(math) => {
-                    let docx_p = Paragraph::new()
-                        .align(AlignmentType::Center)
-                        .add_run(Run::new().add_text(math.to_string()).italic().color("4A154B").size(24));
+                    let docx_p = Paragraph::new().align(AlignmentType::Center).add_run(
+                        Run::new()
+                            .add_text(math.to_string())
+                            .italic()
+                            .color("4A154B")
+                            .size(24),
+                    );
                     doc = doc.add_paragraph(docx_p);
                 }
                 _ => {}
             }
         }
-        
-        let output_file = std::fs::File::create(&options.output_path).map_err(|e| {
-            MartiniError::OutputWrite {
+
+        let output_file =
+            std::fs::File::create(&options.output_path).map_err(|e| MartiniError::OutputWrite {
                 reason: format!("Failed to create output file: {}", e),
-            }
-        })?;
-        
-        doc.build().pack(output_file).map_err(|e| {
-            MartiniError::OutputWrite {
+            })?;
+
+        doc.build()
+            .pack(output_file)
+            .map_err(|e| MartiniError::OutputWrite {
                 reason: format!("Failed to pack DOCX: {}", e),
-            }
-        })?;
-        
+            })?;
+
         let size = options.output_path.metadata().map(|m| m.len()).unwrap_or(0);
-        
+
         Ok(ConversionResult {
             from: Format::Md,
             to: Format::Docx,
@@ -359,16 +393,16 @@ impl MarkdownConverter {
 
 fn build_paragraph(p: ParagraphState) -> Paragraph {
     let mut docx_p = Paragraph::new();
-    
+
     if p.is_blockquote {
         docx_p = docx_p.indent(Some(720), None, None, None);
     }
-    
+
     if p.is_list_item {
         let left_indent = (p.list_indent as i32) * 360;
         docx_p = docx_p.indent(Some(left_indent), None, None, None);
     }
-    
+
     for elem in p.elements {
         match elem {
             ParaElement::Run(mut r) => {
@@ -393,6 +427,6 @@ fn build_paragraph(p: ParagraphState) -> Paragraph {
             }
         }
     }
-    
+
     docx_p
 }
