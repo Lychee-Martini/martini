@@ -10,6 +10,7 @@ A modern, extensible, and high-performance CLI format converter written in Rust.
   - **Default**: Generates a standard multi-resolution `favicon.ico` containing `16x16`, `32x32`, and `48x48` dimensions.
   - **Package Mode (`--package`)**: Generates a comprehensive modern suite of assets including `favicon.ico`, PNGs (16x16, 32x32, 180x180, 192x192, 512x512), `site.webmanifest`, and copy-pasteable HTML header tags.
 - 🏎️ **Concurrently Optimized Batch Processing**: Process a single file or a whole directory concurrently using a `rayon` thread pool. Includes customizable worker threads and directory recursion (`-r`).
+- 📝 **Markdown to Word (DOCX)**: Convert Markdown documents containing rich elements (headings, bold/italic/strikethrough/inline code, bulleted/numbered lists, blockquotes, tables, hyperlinks, and LaTeX equations) directly to standard Word documents (`.docx`) natively.
 - ⚡ **Developer-Friendly & Auto-Detecting CLI**:
   - Make `--from` optional (defaults to `"auto"` detecting from source extensions).
   - Make `--to` optional (detects target format from `--output` extension, or defaults to `favicon` for SVGs and `webp` for other images).
@@ -84,6 +85,20 @@ martini convert -i doc.pdf -o output.jpg --pages "1,3-5" --dpi 300
 martini convert -i ./pdfs -o ./images --from pdf --to webp
 ```
 *Note: Output files are named with page suffixes, e.g., `output_page_1.jpg`, `output_page_2.jpg`.*
+
+### 5. Convert Markdown to Word (DOCX)
+Convert Markdown files (`.md`, `.markdown`) directly to Microsoft Word (`.docx`) files:
+```bash
+# Convert markdown to docx (auto-detects 'md' and 'docx')
+martini convert -i document.md -o document.docx
+
+# Auto-detection default target (defaults output extension to .docx)
+martini convert -i document.md
+```
+LaTeX math equations (enclosed in `$` for inline math or `$$` for display math) are parsed natively and rendered styled in Word:
+```markdown
+$$DCF = \sum_{t=1}^{n} \frac{FCF_t}{(1+WACC)^t} + \frac{FCF_n \times (1+g)}{(WACC - g) \times (1+WACC)^n}$$
+```
 
 ---
 
