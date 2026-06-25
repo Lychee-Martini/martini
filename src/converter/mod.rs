@@ -23,6 +23,8 @@ pub enum Format {
     Webp,
     Avif,
     Pdf,
+    Md,
+    Docx,
 }
 
 impl FromStr for Format {
@@ -37,6 +39,8 @@ impl FromStr for Format {
             "webp" => Ok(Format::Webp),
             "avif" => Ok(Format::Avif),
             "pdf" => Ok(Format::Pdf),
+            "md" | "markdown" => Ok(Format::Md),
+            "docx" => Ok(Format::Docx),
             _ => Err(format!("Unsupported format: '{}'", s)),
         }
     }
@@ -52,6 +56,8 @@ impl std::fmt::Display for Format {
             Format::Webp => write!(f, "webp"),
             Format::Avif => write!(f, "avif"),
             Format::Pdf => write!(f, "pdf"),
+            Format::Md => write!(f, "md"),
+            Format::Docx => write!(f, "docx"),
         }
     }
 }
@@ -260,6 +266,18 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
         to: "png, jpg, jpeg, webp, avif".to_string(),
         description: "Convert PDF pages to images".to_string(),
         parameters: pdf_params,
+    });
+
+    let mut docx_params = std::collections::HashMap::new();
+    docx_params.insert(
+        "overwrite".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    list.push(FormatCapability {
+        from: "md".to_string(),
+        to: "docx".to_string(),
+        description: "Convert Markdown documents to Microsoft Word (DOCX) files".to_string(),
+        parameters: docx_params,
     });
 
     list
