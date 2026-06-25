@@ -78,6 +78,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         "png" => "",
                         "jpg" => ". Options: --quality",
                         "webp" | "avif" | "both" => ". Options: --quality, --lossless",
+                        "docx" => ". Options: --overwrite",
                         _ if f.from == "pdf" => ". Options: --pages, --dpi, --quality, --lossless",
                         _ => "",
                     };
@@ -132,6 +133,14 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 .and_then(|e| e.to_str())
                 .map(|s| s.to_lowercase() == "pdf")
                 .unwrap_or(false);
+            let is_md = input
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|s| {
+                    let ext = s.to_lowercase();
+                    ext == "md" || ext == "markdown"
+                })
+                .unwrap_or(false);
 
             let to_resolved = match to {
                 Some(ref t) => t.clone(),
@@ -142,6 +151,8 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                 "favicon".to_string()
                             } else if is_pdf {
                                 "png".to_string()
+                            } else if is_md {
+                                "docx".to_string()
                             } else {
                                 "webp".to_string()
                             }
@@ -157,6 +168,8 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                 "favicon".to_string()
                             } else if is_pdf {
                                 "png".to_string()
+                            } else if is_md {
+                                "docx".to_string()
                             } else {
                                 "webp".to_string()
                             }
@@ -166,6 +179,8 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                             "favicon".to_string()
                         } else if is_pdf {
                             "png".to_string()
+                        } else if is_md {
+                            "docx".to_string()
                         } else {
                             "webp".to_string()
                         }
