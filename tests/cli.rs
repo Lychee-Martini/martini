@@ -8,6 +8,26 @@ use tempfile::tempdir;
 static PDFIUM_INIT: Once = Once::new();
 static PDFIUM_LOCK: Mutex<()> = Mutex::new(());
 
+fn get_pdfium_for_test() -> pdfium_render::prelude::Pdfium {
+    match pdfium_auto::bind_pdfium_silent() {
+        Ok(pdfium) => pdfium,
+        Err(e) => {
+            let err_msg = format!("{:?}", e);
+            if let Some(path_start) = err_msg.find("path: \"") {
+                let path_part = &err_msg[path_start + 7..];
+                if let Some(path_end) = path_part.find('"') {
+                    let path = &path_part[..path_end];
+                    let std_path = std::path::Path::new(path);
+                    if std_path.is_file() {
+                        let _ = std::fs::remove_file(std_path);
+                    }
+                }
+            }
+            pdfium_auto::bind_pdfium_silent().expect("Failed to load PDFium after cleaning cache")
+        }
+    }
+}
+
 #[test]
 fn test_list_formats() {
     let mut cmd = Command::cargo_bin("martini").unwrap();
@@ -280,14 +300,13 @@ fn test_auto_detect_target_format() {
 #[test]
 fn test_convert_pdf_to_images() {
     let _lock = PDFIUM_LOCK.lock().unwrap();
-    use pdfium_auto::bind_pdfium_silent;
     use pdfium_render::prelude::*;
 
     let temp_dir = tempdir().unwrap();
     let input_pdf = temp_dir.path().join("test_input.pdf");
 
     // 1. Create a simple PDF file with 2 blank pages
-    let pdfium = bind_pdfium_silent().expect("Failed to load PDFium");
+    let pdfium = get_pdfium_for_test();
     let mut document = pdfium.create_new_pdf().expect("Failed to create new PDF");
     document
         .pages_mut()
@@ -346,10 +365,9 @@ fn test_convert_pdf_to_images() {
 
 #[test]
 fn test_pdfium_thread_safety() {
-    use pdfium_auto::bind_pdfium_silent;
     // Initialize PDFium once before spawning threads
     PDFIUM_INIT.call_once(|| {
-        let _ = bind_pdfium_silent();
+        let _ = get_pdfium_for_test();
     });
 
     let threads: Vec<_> = (0..3)
@@ -559,13 +577,12 @@ fn test_svg_resize() {
 #[test]
 fn test_pdf_resize() {
     let _lock = PDFIUM_LOCK.lock().unwrap();
-    use pdfium_auto::bind_pdfium_silent;
     use pdfium_render::prelude::*;
 
     let temp_dir = tempdir().unwrap();
     let input_pdf = temp_dir.path().join("test_input.pdf");
 
-    let pdfium = bind_pdfium_silent().expect("Failed to load PDFium");
+    let pdfium = get_pdfium_for_test();
     let mut document = pdfium.create_new_pdf().expect("Failed to create new PDF");
     document
         .pages_mut()

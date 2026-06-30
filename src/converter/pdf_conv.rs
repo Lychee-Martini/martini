@@ -1,7 +1,6 @@
 use pdfium_auto::bind_pdfium_silent;
 use pdfium_render::prelude::*;
 use std::fs;
-use std::sync::OnceLock;
 
 use crate::converter::image_conv::{AvifEncoder, Encoder, JpegEncoder, PngEncoder, WebpEncoder};
 use crate::converter::{ConversionResult, ConvertOptions, Format, OutputFileMetadata};
@@ -11,17 +10,38 @@ pub struct ThreadSafePdfium(pub Pdfium);
 unsafe impl Send for ThreadSafePdfium {}
 unsafe impl Sync for ThreadSafePdfium {}
 
-static PDFIUM: OnceLock<Result<ThreadSafePdfium, String>> = OnceLock::new();
+static PDFIUM: std::sync::Mutex<Option<&'static ThreadSafePdfium>> = std::sync::Mutex::new(None);
 
 pub fn get_pdfium() -> Result<&'static Pdfium, MartiniError> {
-    let res = PDFIUM.get_or_init(|| {
-        bind_pdfium_silent()
-            .map(ThreadSafePdfium)
-            .map_err(|e| format!("Failed to load PDFium library: {:?}", e))
-    });
-    res.as_ref()
-        .map(|ts| &ts.0)
-        .map_err(|e| MartiniError::PdfRender(e.clone()))
+    let mut lock = PDFIUM.lock().unwrap();
+    if let Some(ts_pdfium) = *lock {
+        return Ok(&ts_pdfium.0);
+    }
+
+    match bind_pdfium_silent() {
+        Ok(pdfium) => {
+            let static_ref = Box::leak(Box::new(ThreadSafePdfium(pdfium)));
+            *lock = Some(static_ref);
+            Ok(&static_ref.0)
+        }
+        Err(e) => {
+            let err_msg = format!("{:?}", e);
+            if let Some(path_start) = err_msg.find("path: \"") {
+                let path_part = &err_msg[path_start + 7..];
+                if let Some(path_end) = path_part.find('"') {
+                    let path = &path_part[..path_end];
+                    let std_path = std::path::Path::new(path);
+                    if std_path.is_file() {
+                        let _ = std::fs::remove_file(std_path);
+                    }
+                }
+            }
+            Err(MartiniError::PdfRender(format!(
+                "Failed to load PDFium library: {:?}",
+                e
+            )))
+        }
+    }
 }
 
 pub struct PdfConverter;
