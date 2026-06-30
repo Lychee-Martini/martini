@@ -1,7 +1,10 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
+use std::sync::Mutex;
 use tempfile::tempdir;
+
+static PDFIUM_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn test_list_formats() {
@@ -274,6 +277,7 @@ fn test_auto_detect_target_format() {
 
 #[test]
 fn test_convert_pdf_to_images() {
+    let _lock = PDFIUM_LOCK.lock().unwrap();
     use pdfium_auto::bind_pdfium_silent;
     use pdfium_render::prelude::*;
 
@@ -546,6 +550,7 @@ fn test_svg_resize() {
 
 #[test]
 fn test_pdf_resize() {
+    let _lock = PDFIUM_LOCK.lock().unwrap();
     use pdfium_auto::bind_pdfium_silent;
     use pdfium_render::prelude::*;
 
