@@ -544,4 +544,41 @@ fn test_svg_resize() {
     assert_eq!(output_img.width(), 400);
 }
 
+#[test]
+fn test_pdf_resize() {
+    use pdfium_auto::bind_pdfium_silent;
+    use pdfium_render::prelude::*;
+
+    let temp_dir = tempdir().unwrap();
+    let input_pdf = temp_dir.path().join("test_input.pdf");
+
+    let pdfium = bind_pdfium_silent().expect("Failed to load PDFium");
+    let mut document = pdfium.create_new_pdf().expect("Failed to create new PDF");
+    document
+        .pages_mut()
+        .create_page_at_end(PdfPagePaperSize::a4())
+        .expect("Failed to create page 1");
+
+    let pdf_bytes = document.save_to_bytes().expect("Failed to save PDF to bytes");
+    fs::write(&input_pdf, &pdf_bytes).expect("Failed to write test PDF");
+
+    let output_png = temp_dir.path().join("output.png");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg(&input_pdf)
+        .arg("-o")
+        .arg(&output_png)
+        .arg("--width")
+        .arg("300")
+        .assert()
+        .success();
+
+    let out_page = temp_dir.path().join("output_page_1.png");
+    assert!(out_page.exists());
+    let output_img = image::open(&out_page).unwrap();
+    assert_eq!(output_img.width(), 300);
+}
+
+
 

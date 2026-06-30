@@ -106,7 +106,19 @@ impl PdfConverter {
                     e
                 ))
             })?;
-            let dynamic_img = img.as_image();
+            let mut dynamic_img = img.as_image();
+            if options.width.is_some() || options.height.is_some() {
+                let (w, h) = crate::converter::image_conv::calculate_dimensions(
+                    dynamic_img.width(),
+                    dynamic_img.height(),
+                    options.width,
+                    options.height,
+                    options.no_upscale,
+                );
+                if (w, h) != (dynamic_img.width(), dynamic_img.height()) {
+                    dynamic_img = dynamic_img.resize_exact(w, h, image::imageops::FilterType::Lanczos3);
+                }
+            }
 
             // Setup page-specific output path
             let page_num = page_index + 1;
@@ -132,6 +144,9 @@ impl PdfConverter {
                 overwrite: options.overwrite,
                 pages: None,
                 dpi: options.dpi,
+                width: options.width,
+                height: options.height,
+                no_upscale: options.no_upscale,
             };
 
             // Encode to target format
