@@ -86,7 +86,20 @@ martini convert -i ./pdfs -o ./images --from pdf --to webp
 ```
 *Note: Output files are named with page suffixes, e.g., `output_page_1.jpg`, `output_page_2.jpg`.*
 
-### 5. Convert Markdown to Word (DOCX)
+### 5. Image Resizing
+Resize standard images, SVG vector images, or PDF pages on conversion:
+```bash
+# Resize PNG to width 400 (aspect ratio is maintained automatically)
+martini convert -i input.png -o output.png --width 400
+
+# Resize SVG to fit within 500x500 bounding box (preserves aspect ratio without distortion)
+martini convert -i logo.svg -o output.png --width 500 --height 500
+
+# Downscale JPEG to height 300, and prevent upscaling if input is smaller than 300px
+martini convert -i small.jpg -o output.jpg --height 300 --no-upscale
+```
+
+### 6. Convert Markdown to Word (DOCX)
 Convert Markdown files (`.md`, `.markdown`) directly to Microsoft Word (`.docx`) files:
 ```bash
 # Convert markdown to docx (auto-detects 'md' and 'docx')
