@@ -30,7 +30,7 @@ impl ImageConverter {
             if to != Format::Favicon {
                 let svg_w = svg_tree.size().width();
                 let svg_h = svg_tree.size().height();
-                
+
                 let (w, h) = calculate_dimensions(
                     svg_w.round() as u32,
                     svg_h.round() as u32,
@@ -38,7 +38,7 @@ impl ImageConverter {
                     options.height,
                     options.no_upscale,
                 );
-                
+
                 let rgba = render_svg_to_rgba(&svg_tree, w, h)?;
                 let img_buffer =
                     image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(w, h, rgba)
@@ -594,28 +594,57 @@ pub(crate) mod tests {
 
     #[test]
     fn test_calculate_dimensions_width_only() {
-        assert_eq!(calculate_dimensions(800, 600, Some(400), None, false), (400, 300));
-        assert_eq!(calculate_dimensions(800, 600, Some(1600), None, false), (1600, 1200));
-        assert_eq!(calculate_dimensions(800, 600, Some(1600), None, true), (800, 600)); // no-upscale
+        assert_eq!(
+            calculate_dimensions(800, 600, Some(400), None, false),
+            (400, 300)
+        );
+        assert_eq!(
+            calculate_dimensions(800, 600, Some(1600), None, false),
+            (1600, 1200)
+        );
+        assert_eq!(
+            calculate_dimensions(800, 600, Some(1600), None, true),
+            (800, 600)
+        ); // no-upscale
     }
 
     #[test]
     fn test_calculate_dimensions_height_only() {
-        assert_eq!(calculate_dimensions(800, 600, None, Some(300), false), (400, 300));
-        assert_eq!(calculate_dimensions(800, 600, None, Some(1200), false), (1600, 1200));
-        assert_eq!(calculate_dimensions(800, 600, None, Some(1200), true), (800, 600)); // no-upscale
+        assert_eq!(
+            calculate_dimensions(800, 600, None, Some(300), false),
+            (400, 300)
+        );
+        assert_eq!(
+            calculate_dimensions(800, 600, None, Some(1200), false),
+            (1600, 1200)
+        );
+        assert_eq!(
+            calculate_dimensions(800, 600, None, Some(1200), true),
+            (800, 600)
+        ); // no-upscale
     }
 
     #[test]
     fn test_calculate_dimensions_both_fit() {
         // Fits within 400x400 limit, maintaining 4:3 aspect ratio (400x300)
-        assert_eq!(calculate_dimensions(800, 600, Some(400), Some(400), false), (400, 300));
+        assert_eq!(
+            calculate_dimensions(800, 600, Some(400), Some(400), false),
+            (400, 300)
+        );
         // Fits within 400x200 limit (267x200)
-        assert_eq!(calculate_dimensions(800, 600, Some(400), Some(200), false), (267, 200));
+        assert_eq!(
+            calculate_dimensions(800, 600, Some(400), Some(200), false),
+            (267, 200)
+        );
         // Upscale fits within 1600x1200 limit
-        assert_eq!(calculate_dimensions(800, 600, Some(1600), Some(1600), false), (1600, 1200));
+        assert_eq!(
+            calculate_dimensions(800, 600, Some(1600), Some(1600), false),
+            (1600, 1200)
+        );
         // Upscale prevented
-        assert_eq!(calculate_dimensions(800, 600, Some(1600), Some(1600), true), (800, 600));
+        assert_eq!(
+            calculate_dimensions(800, 600, Some(1600), Some(1600), true),
+            (800, 600)
+        );
     }
 }
-

@@ -559,7 +559,9 @@ fn test_pdf_resize() {
         .create_page_at_end(PdfPagePaperSize::a4())
         .expect("Failed to create page 1");
 
-    let pdf_bytes = document.save_to_bytes().expect("Failed to save PDF to bytes");
+    let pdf_bytes = document
+        .save_to_bytes()
+        .expect("Failed to save PDF to bytes");
     fs::write(&input_pdf, &pdf_bytes).expect("Failed to write test PDF");
 
     let output_png = temp_dir.path().join("output.png");
@@ -579,6 +581,3 @@ fn test_pdf_resize() {
     let output_img = image::open(&out_page).unwrap();
     assert_eq!(output_img.width(), 300);
 }
-
-
-

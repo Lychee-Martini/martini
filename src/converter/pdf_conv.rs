@@ -116,7 +116,8 @@ impl PdfConverter {
                     options.no_upscale,
                 );
                 if (w, h) != (dynamic_img.width(), dynamic_img.height()) {
-                    dynamic_img = dynamic_img.resize_exact(w, h, image::imageops::FilterType::Lanczos3);
+                    dynamic_img =
+                        dynamic_img.resize_exact(w, h, image::imageops::FilterType::Lanczos3);
                 }
             }
 
