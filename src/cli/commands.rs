@@ -78,6 +78,18 @@ pub enum Commands {
         /// Resolution in DPI for PDF rendering (default: 150)
         #[arg(long, default_value_t = 150)]
         dpi: u16,
+
+        /// Target width in pixels (optional)
+        #[arg(long)]
+        width: Option<u32>,
+
+        /// Target height in pixels (optional)
+        #[arg(long)]
+        height: Option<u32>,
+
+        /// Prevent upscaling of images smaller than the target dimensions
+        #[arg(long)]
+        no_upscale: bool,
     },
 
     /// List all supported format conversions and their parameters

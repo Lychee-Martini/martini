@@ -73,6 +73,9 @@ pub struct ConvertOptions {
     pub overwrite: bool,
     pub pages: Option<String>,
     pub dpi: u16,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub no_upscale: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

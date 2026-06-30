@@ -32,6 +32,9 @@ pub struct BatchConvertOptions {
     pub pages: Option<String>,
     pub dpi: u16,
     pub files: Option<Vec<PathBuf>>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub no_upscale: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -266,6 +269,9 @@ pub fn batch_convert(
                     overwrite: options.overwrite,
                     pages: options.pages.clone(),
                     dpi: options.dpi,
+                    width: options.width,
+                    height: options.height,
+                    no_upscale: options.no_upscale,
                 };
 
                 match crate::converter::convert(from_fmt, *target_fmt, &input_bytes, &convert_opts)

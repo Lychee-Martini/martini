@@ -476,3 +476,27 @@ fn test_convert_glob_pattern_invalid_output() {
         .code(3) // InvalidInputData
         .stderr(predicate::str::contains("Output path must be a directory"));
 }
+
+#[test]
+fn test_cli_parsing_resizing_flags() {
+    let temp_dir = tempdir().unwrap();
+    let input_png = temp_dir.path().join("input.png");
+    let png_img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> = image::ImageBuffer::new(10, 10);
+    png_img.save(&input_png).unwrap();
+
+    let out_png = temp_dir.path().join("output.png");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg(&input_png)
+        .arg("-o")
+        .arg(&out_png)
+        .arg("--width")
+        .arg("200")
+        .arg("--height")
+        .arg("150")
+        .arg("--no-upscale")
+        .assert()
+        .success();
+}
+

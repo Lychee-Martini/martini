@@ -105,6 +105,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             workers,
             pages,
             dpi,
+            width,
+            height,
+            no_upscale,
         } => {
             let input_str = input.to_string_lossy();
             let is_glob = is_glob_pattern(&input);
@@ -305,6 +308,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     pages: pages.clone(),
                     dpi,
                     files: glob_files,
+                    width,
+                    height,
+                    no_upscale,
                 };
 
                 let batch_result = batch_convert(batch_options, Some(tracker))?;
@@ -396,6 +402,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         overwrite,
                         pages: pages.clone(),
                         dpi,
+                        width,
+                        height,
+                        no_upscale,
                     };
 
                     info!("Starting conversion to {}...", target_fmt);
