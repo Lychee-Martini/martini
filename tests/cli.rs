@@ -2,8 +2,10 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use std::sync::Mutex;
+use std::sync::Once;
 use tempfile::tempdir;
 
+static PDFIUM_INIT: Once = Once::new();
 static PDFIUM_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
@@ -344,6 +346,12 @@ fn test_convert_pdf_to_images() {
 
 #[test]
 fn test_pdfium_thread_safety() {
+    use pdfium_auto::bind_pdfium_silent;
+    // Initialize PDFium once before spawning threads
+    PDFIUM_INIT.call_once(|| {
+        let _ = bind_pdfium_silent();
+    });
+
     let threads: Vec<_> = (0..3)
         .map(|_| {
             std::thread::spawn(|| {
