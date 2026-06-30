@@ -26,10 +26,19 @@ impl ImageConverter {
             let opt = usvg::Options::default();
             let svg_tree = usvg::Tree::from_data(input_data, &opt)?;
 
-            // If we're not converting to Favicon, render it at natural size to target_img
+            // If we're not converting to Favicon, render it at calculated size to target_img
             if to != Format::Favicon {
-                let w = svg_tree.size().width().round() as u32;
-                let h = svg_tree.size().height().round() as u32;
+                let svg_w = svg_tree.size().width();
+                let svg_h = svg_tree.size().height();
+                
+                let (w, h) = calculate_dimensions(
+                    svg_w.round() as u32,
+                    svg_h.round() as u32,
+                    options.width,
+                    options.height,
+                    options.no_upscale,
+                );
+                
                 let rgba = render_svg_to_rgba(&svg_tree, w, h)?;
                 let img_buffer =
                     image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(w, h, rgba)
@@ -43,7 +52,19 @@ impl ImageConverter {
                 (Some(svg_tree), None)
             }
         } else {
-            let img = image::load_from_memory(input_data)?;
+            let mut img = image::load_from_memory(input_data)?;
+            if to != Format::Favicon && (options.width.is_some() || options.height.is_some()) {
+                let (w, h) = calculate_dimensions(
+                    img.width(),
+                    img.height(),
+                    options.width,
+                    options.height,
+                    options.no_upscale,
+                );
+                if (w, h) != (img.width(), img.height()) {
+                    img = img.resize_exact(w, h, FilterType::Lanczos3);
+                }
+            }
             (None, Some(img))
         };
 

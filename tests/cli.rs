@@ -500,3 +500,48 @@ fn test_cli_parsing_resizing_flags() {
         .success();
 }
 
+#[test]
+fn test_image_resize_width_only() {
+    let temp_dir = tempdir().unwrap();
+    let input_png = temp_dir.path().join("input.png");
+    let png_img = image::ImageBuffer::from_pixel(100, 50, image::Rgba([0u8, 0u8, 0u8, 255u8]));
+    png_img.save(&input_png).unwrap();
+
+    let out_png = temp_dir.path().join("output.png");
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg(&input_png)
+        .arg("-o")
+        .arg(&out_png)
+        .arg("--width")
+        .arg("50")
+        .assert()
+        .success();
+
+    let output_img = image::open(&out_png).unwrap();
+    assert_eq!(output_img.width(), 50);
+    assert_eq!(output_img.height(), 25);
+}
+
+#[test]
+fn test_svg_resize() {
+    let temp_dir = tempdir().unwrap();
+    let out_png = temp_dir.path().join("output.png");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg("tests/fixtures/sample.svg")
+        .arg("-o")
+        .arg(&out_png)
+        .arg("--width")
+        .arg("400")
+        .assert()
+        .success();
+
+    let output_img = image::open(&out_png).unwrap();
+    assert_eq!(output_img.width(), 400);
+}
+
+
