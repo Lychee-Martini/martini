@@ -365,6 +365,7 @@ fn test_convert_pdf_to_images() {
 
 #[test]
 fn test_pdfium_thread_safety() {
+    let _lock = PDFIUM_LOCK.lock().unwrap();
     // Initialize PDFium once before spawning threads
     PDFIUM_INIT.call_once(|| {
         let _ = get_pdfium_for_test();
