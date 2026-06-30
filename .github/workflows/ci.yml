@@ -33,5 +33,24 @@ jobs:
       - name: Clippy Lints
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Install PDFium on macOS
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          CACHE_DIR="$HOME/Library/Caches/pdf2md"
+          mkdir -p "$CACHE_DIR"
+          cd "$CACHE_DIR"
+          # Download the universal macOS build for chromium/7690
+          curl -L -o pdfium-mac-univ.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7690/pdfium-mac-univ.tgz"
+          tar -xzf pdfium-mac-univ.tgz
+          # Ensure extracted directory is named pdfium-7690 (the tests look for this path)
+          if [ ! -d "$CACHE_DIR/pdfium-7690" ]; then
+            EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "pdfium*" | sed -n '1p' | sed 's|^./||')
+            if [ -n "$EXTRACTED_DIR" ] && [ "$EXTRACTED_DIR" != "." ]; then
+              mv "$EXTRACTED_DIR" pdfium-7690
+            fi
+          fi
+          ls -la "$CACHE_DIR/pdfium-7690"
+
       - name: Run Tests
         run: cargo test --all-targets
