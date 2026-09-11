@@ -35,6 +35,14 @@ pub struct BatchConvertOptions {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub no_upscale: bool,
+    pub theme: Option<String>,
+    pub paper_size: Option<String>,
+    pub margin: Option<String>,
+    pub font_family: Option<String>,
+    pub header: Option<String>,
+    pub footer: Option<String>,
+    pub no_page_numbers: bool,
+    pub toc: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -58,6 +66,7 @@ pub fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> V
         "avif" => ["avif"].iter().copied().collect(),
         "svg" => ["svg"].iter().copied().collect(),
         "pdf" => ["pdf"].iter().copied().collect(),
+        "md" | "markdown" => ["md", "markdown"].iter().copied().collect(),
         _ => ["png", "jpg", "jpeg"].iter().copied().collect(), // default/auto
     };
 
@@ -272,6 +281,14 @@ pub fn batch_convert(
                     width: options.width,
                     height: options.height,
                     no_upscale: options.no_upscale,
+                    theme: options.theme.clone(),
+                    paper_size: options.paper_size.clone(),
+                    margin: options.margin.clone(),
+                    font_family: options.font_family.clone(),
+                    header: options.header.clone(),
+                    footer: options.footer.clone(),
+                    no_page_numbers: options.no_page_numbers,
+                    toc: options.toc,
                 };
 
                 match crate::converter::convert(from_fmt, *target_fmt, &input_bytes, &convert_opts)

@@ -79,6 +79,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         "jpg" => ". Options: --quality",
                         "webp" | "avif" | "both" => ". Options: --quality, --lossless",
                         "docx" => ". Options: --overwrite",
+                        "pdf" if f.from == "md" => {
+                            ". Options: --theme, --paper-size, --margin, --font-family, --header, --footer, --no-page-numbers, --toc, --overwrite"
+                        }
                         _ if f.from == "pdf" => ". Options: --pages, --dpi, --quality, --lossless",
                         _ => "",
                     };
@@ -108,6 +111,14 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             width,
             height,
             no_upscale,
+            theme,
+            paper_size,
+            margin,
+            font_family,
+            header,
+            footer,
+            no_page_numbers,
+            toc,
         } => {
             let input_str = input.to_string_lossy();
             let is_glob = is_glob_pattern(&input);
@@ -195,7 +206,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                             } else if is_pdf {
                                 "png".to_string()
                             } else if is_md {
-                                "docx".to_string()
+                                "pdf".to_string()
                             } else {
                                 "webp".to_string()
                             }
@@ -212,7 +223,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                             } else if is_pdf {
                                 "png".to_string()
                             } else if is_md {
-                                "docx".to_string()
+                                "pdf".to_string()
                             } else {
                                 "webp".to_string()
                             }
@@ -223,7 +234,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         } else if is_pdf {
                             "png".to_string()
                         } else if is_md {
-                            "docx".to_string()
+                            "pdf".to_string()
                         } else {
                             "webp".to_string()
                         }
@@ -311,6 +322,14 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     width,
                     height,
                     no_upscale,
+                    theme: theme.clone(),
+                    paper_size: paper_size.clone(),
+                    margin: margin.clone(),
+                    font_family: font_family.clone(),
+                    header: header.clone(),
+                    footer: footer.clone(),
+                    no_page_numbers,
+                    toc,
                 };
 
                 let batch_result = batch_convert(batch_options, Some(tracker))?;
@@ -405,6 +424,14 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                         width,
                         height,
                         no_upscale,
+                        theme: theme.clone(),
+                        paper_size: paper_size.clone(),
+                        margin: margin.clone(),
+                        font_family: font_family.clone(),
+                        header: header.clone(),
+                        footer: footer.clone(),
+                        no_page_numbers,
+                        toc,
                     };
 
                     info!("Starting conversion to {}...", target_fmt);

@@ -24,6 +24,7 @@ pub struct CliArgs {
 }
 
 #[derive(Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Convert a file or directory from one format to another
     Convert {
@@ -90,6 +91,38 @@ pub enum Commands {
         /// Prevent upscaling of images smaller than the target dimensions
         #[arg(long)]
         no_upscale: bool,
+
+        /// Document styling theme for Markdown to PDF (github, academic, modern, minimal)
+        #[arg(long)]
+        theme: Option<String>,
+
+        /// Paper size for PDF rendering (a4, letter, a3, a5)
+        #[arg(long)]
+        paper_size: Option<String>,
+
+        /// Page margins for PDF (e.g. '20mm', '1in')
+        #[arg(long)]
+        margin: Option<String>,
+
+        /// Custom font family for PDF rendering
+        #[arg(long)]
+        font_family: Option<String>,
+
+        /// Custom header text for PDF
+        #[arg(long)]
+        header: Option<String>,
+
+        /// Custom footer text for PDF
+        #[arg(long)]
+        footer: Option<String>,
+
+        /// Disable page numbers in PDF footer
+        #[arg(long)]
+        no_page_numbers: bool,
+
+        /// Automatically generate Table of Contents in PDF
+        #[arg(long)]
+        toc: bool,
     },
 
     /// List all supported format conversions and their parameters

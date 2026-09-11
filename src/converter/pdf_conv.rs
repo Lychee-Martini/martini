@@ -168,6 +168,14 @@ impl PdfConverter {
                 width: options.width,
                 height: options.height,
                 no_upscale: options.no_upscale,
+                theme: options.theme.clone(),
+                paper_size: options.paper_size.clone(),
+                margin: options.margin.clone(),
+                font_family: options.font_family.clone(),
+                header: options.header.clone(),
+                footer: options.footer.clone(),
+                no_page_numbers: options.no_page_numbers,
+                toc: options.toc,
             };
 
             // Encode to target format

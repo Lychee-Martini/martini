@@ -612,3 +612,127 @@ fn test_pdf_resize() {
     let output_img = image::open(&out_page).unwrap();
     assert_eq!(output_img.width(), 300);
 }
+
+#[test]
+fn test_convert_md_to_pdf() {
+    let temp_dir = tempdir().unwrap();
+    let output_pdf = temp_dir.path().join("output.pdf");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("--from")
+        .arg("md")
+        .arg("--to")
+        .arg("pdf")
+        .arg("-i")
+        .arg("tests/fixtures/sample.md")
+        .arg("-o")
+        .arg(&output_pdf)
+        .assert()
+        .success();
+
+    assert!(output_pdf.exists());
+    let bytes = fs::read(&output_pdf).unwrap();
+    assert!(bytes.starts_with(b"%PDF"));
+    assert!(bytes.len() > 100);
+}
+
+#[test]
+fn test_convert_md_to_pdf_default_target() {
+    let temp_dir = tempdir().unwrap();
+    let input_md = temp_dir.path().join("document.md");
+    fs::copy("tests/fixtures/sample.md", &input_md).unwrap();
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg(&input_md)
+        .assert()
+        .success();
+
+    let expected_pdf = temp_dir.path().join("document.pdf");
+    assert!(expected_pdf.exists());
+    let bytes = fs::read(&expected_pdf).unwrap();
+    assert!(bytes.starts_with(b"%PDF"));
+}
+
+#[test]
+fn test_convert_md_to_pdf_with_options() {
+    let temp_dir = tempdir().unwrap();
+    let output_pdf = temp_dir.path().join("styled.pdf");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg("tests/fixtures/sample.md")
+        .arg("-o")
+        .arg(&output_pdf)
+        .arg("--theme")
+        .arg("modern")
+        .arg("--paper-size")
+        .arg("letter")
+        .arg("--margin")
+        .arg("15mm")
+        .arg("--header")
+        .arg("Confidential Document")
+        .arg("--footer")
+        .arg("Company Internal")
+        .arg("--toc")
+        .assert()
+        .success();
+
+    assert!(output_pdf.exists());
+    let bytes = fs::read(&output_pdf).unwrap();
+    assert!(bytes.starts_with(b"%PDF"));
+}
+
+#[test]
+fn test_convert_md_to_pdf_all_themes() {
+    let temp_dir = tempdir().unwrap();
+    for theme in ["github", "academic", "modern", "minimal"] {
+        let output_pdf = temp_dir.path().join(format!("{}.pdf", theme));
+        let mut cmd = Command::cargo_bin("martini").unwrap();
+        cmd.arg("convert")
+            .arg("-i")
+            .arg("tests/fixtures/sample.md")
+            .arg("-o")
+            .arg(&output_pdf)
+            .arg("--theme")
+            .arg(theme)
+            .assert()
+            .success();
+
+        assert!(output_pdf.exists());
+        let bytes = fs::read(&output_pdf).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+    }
+}
+
+#[test]
+fn test_batch_convert_md_to_pdf() {
+    let temp_dir = tempdir().unwrap();
+    let input_dir = temp_dir.path().join("docs");
+    let output_dir = temp_dir.path().join("out_pdfs");
+    fs::create_dir_all(&input_dir).unwrap();
+
+    fs::copy("tests/fixtures/sample.md", input_dir.join("doc1.md")).unwrap();
+    fs::copy("tests/fixtures/sample.md", input_dir.join("doc2.md")).unwrap();
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg(&input_dir)
+        .arg("-o")
+        .arg(&output_dir)
+        .arg("--from")
+        .arg("md")
+        .arg("--to")
+        .arg("pdf")
+        .assert()
+        .success();
+
+    assert!(output_dir.join("doc1.pdf").exists());
+    assert!(output_dir.join("doc2.pdf").exists());
+    let bytes1 = fs::read(output_dir.join("doc1.pdf")).unwrap();
+    assert!(bytes1.starts_with(b"%PDF"));
+}

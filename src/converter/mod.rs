@@ -5,7 +5,10 @@ use std::str::FromStr;
 pub mod batch;
 pub mod image_conv;
 pub mod md_conv;
+pub mod md_pdf;
+pub mod md_to_typst;
 pub mod pdf_conv;
+pub mod typst_engine;
 
 #[derive(Debug, Clone)]
 pub struct EncodedFile {
@@ -76,6 +79,14 @@ pub struct ConvertOptions {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub no_upscale: bool,
+    pub theme: Option<String>,
+    pub paper_size: Option<String>,
+    pub margin: Option<String>,
+    pub font_family: Option<String>,
+    pub header: Option<String>,
+    pub footer: Option<String>,
+    pub no_page_numbers: bool,
+    pub toc: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -284,6 +295,50 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
         parameters: docx_params,
     });
 
+    let mut pdf_md_params = std::collections::HashMap::new();
+    pdf_md_params.insert(
+        "theme".to_string(),
+        "string ('github', 'academic', 'modern', 'minimal', default 'github')".to_string(),
+    );
+    pdf_md_params.insert(
+        "paper_size".to_string(),
+        "string ('a4', 'letter', 'a3', 'a5', default 'a4')".to_string(),
+    );
+    pdf_md_params.insert(
+        "margin".to_string(),
+        "string (e.g. '20mm', '1in', default '20mm')".to_string(),
+    );
+    pdf_md_params.insert(
+        "font_family".to_string(),
+        "string (custom font family name)".to_string(),
+    );
+    pdf_md_params.insert(
+        "header".to_string(),
+        "string (custom header text)".to_string(),
+    );
+    pdf_md_params.insert(
+        "footer".to_string(),
+        "string (custom footer text)".to_string(),
+    );
+    pdf_md_params.insert(
+        "no_page_numbers".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    pdf_md_params.insert(
+        "toc".to_string(),
+        "boolean (automatically generate table of contents, default false)".to_string(),
+    );
+    pdf_md_params.insert(
+        "overwrite".to_string(),
+        "boolean (default false)".to_string(),
+    );
+    list.push(FormatCapability {
+        from: "md".to_string(),
+        to: "pdf".to_string(),
+        description: "Convert Markdown documents to PDF files with Pure Rust engine".to_string(),
+        parameters: pdf_md_params,
+    });
+
     list
 }
 
@@ -310,19 +365,20 @@ pub fn convert(
     input_data: &[u8],
     options: &ConvertOptions,
 ) -> Result<ConversionResult, MartiniError> {
-    if to == Format::Pdf && from != Format::Pdf {
-        return Err(MartiniError::UnsupportedConversion {
-            from: from.to_string(),
-            to: to.to_string(),
-        });
-    }
-
-    if from == Format::Md && to == Format::Docx {
+    if from == Format::Md && to == Format::Pdf {
+        let converter = md_pdf::MarkdownPdfConverter;
+        converter.convert_markdown_to_pdf(input_data, options)
+    } else if from == Format::Md && to == Format::Docx {
         let converter = md_conv::MarkdownConverter;
         converter.convert_markdown(input_data, options)
     } else if from == Format::Pdf {
         let converter = pdf_conv::PdfConverter;
         converter.convert_pdf(to, input_data, options)
+    } else if to == Format::Pdf {
+        Err(MartiniError::UnsupportedConversion {
+            from: from.to_string(),
+            to: to.to_string(),
+        })
     } else {
         let converter = image_conv::ImageConverter;
         converter.convert_image(from, to, input_data, options)

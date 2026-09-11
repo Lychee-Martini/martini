@@ -10,10 +10,12 @@ A modern, extensible, and high-performance CLI format converter written in Rust.
   - **Default**: Generates a standard multi-resolution `favicon.ico` containing `16x16`, `32x32`, and `48x48` dimensions.
   - **Package Mode (`--package`)**: Generates a comprehensive modern suite of assets including `favicon.ico`, PNGs (16x16, 32x32, 180x180, 192x192, 512x512), `site.webmanifest`, and copy-pasteable HTML header tags.
 - 🏎️ **Concurrently Optimized Batch Processing**: Process a single file or a whole directory concurrently using a `rayon` thread pool. Includes customizable worker threads and directory recursion (`-r`).
-- 📝 **Markdown to Word (DOCX)**: Convert Markdown documents containing rich elements (headings, bold/italic/strikethrough/inline code, bulleted/numbered lists, blockquotes, tables, hyperlinks, and LaTeX equations) directly to standard Word documents (`.docx`) natively.
+- 📝 **Markdown to PDF & Word (DOCX)**:
+  - **Pure Rust Markdown to PDF**: Powered by an embedded `typst` typesetting engine with zero external dependencies. Supports auto-detection of CJK system fonts (Microsoft YaHei, PingFang SC, Noto Sans CJK), customizable themes (`github`, `academic`, `modern`, `minimal`), paper sizes (A4, Letter, A3, A5), margins, headers/footers, page numbers, automatic table of contents (`--toc`), syntax-highlighted code blocks, GFM tables, and LaTeX math formulas.
+  - **Markdown to DOCX**: Convert Markdown files directly to Microsoft Word (`.docx`) files natively.
 - ⚡ **Developer-Friendly & Auto-Detecting CLI**:
   - Make `--from` optional (defaults to `"auto"` detecting from source extensions).
-  - Make `--to` optional (detects target format from `--output` extension, or defaults to `favicon` for SVGs and `webp` for other images).
+  - Make `--to` optional (detects target format from `--output` extension, or defaults to `pdf` for Markdown, `favicon` for SVGs, and `webp` for other images).
   - Make `--output` optional (omitted outputs are generated in-place next to source files).
   - Support deleting source files after successful conversion (`-d` / `--delete-original`).
 - 🤖 **Agent Skill Ready**:
@@ -63,10 +65,13 @@ martini convert -i photo.jpg
 ```
 
 ### 3. Batch Convert a Directory
-Concurrently convert all images in a folder:
+Concurrently convert all images or documents in a folder:
 ```bash
 # Convert all PNG/JPG images in the directory to WebP
 martini convert -i ./images --to webp
+
+# Convert all Markdown files in a folder to PDF
+martini convert -i ./docs --from md --to pdf -o ./output_pdfs
 
 # Recursively convert all images in a folder to WebP & AVIF, and delete the original files upon success
 martini convert -i ./images --to both -r --delete-original
@@ -99,14 +104,27 @@ martini convert -i logo.svg -o output.png --width 500 --height 500
 martini convert -i small.jpg -o output.jpg --height 300 --no-upscale
 ```
 
-### 6. Convert Markdown to Word (DOCX)
-Convert Markdown files (`.md`, `.markdown`) directly to Microsoft Word (`.docx`) files:
+### 6. Convert Markdown to PDF
+Convert Markdown files (`.md`, `.markdown`) directly to high-fidelity PDF documents with the embedded Pure Rust Typst engine:
 ```bash
-# Convert markdown to docx (auto-detects 'md' and 'docx')
-martini convert -i document.md -o document.docx
-
-# Auto-detection default target (defaults output extension to .docx)
+# Convert Markdown to PDF (defaults to pdf when input is .md)
 martini convert -i document.md
+
+# Convert with modern styling theme, US Letter size, and Table of Contents
+martini convert -i README.md -o output.pdf --theme modern --paper-size letter --toc
+
+# Convert with custom margins, header, and footer
+martini convert -i report.md -o report.pdf --margin 15mm --header "Internal Report" --footer "Confidential"
+
+# Available themes: github (default), academic, modern, minimal
+martini convert -i paper.md -o paper.pdf --theme academic
+```
+
+### 7. Convert Markdown to Word (DOCX)
+Convert Markdown files directly to Microsoft Word (`.docx`) files:
+```bash
+# Convert markdown to docx explicitly
+martini convert -i document.md -o document.docx --to docx
 ```
 LaTeX math equations (enclosed in `$` for inline math or `$$` for display math) are parsed natively and rendered styled in Word:
 ```markdown

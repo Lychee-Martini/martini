@@ -19,42 +19,55 @@ path = "src/main.rs"
 
 [dependencies]
 # CLI Parsing
-clap = { version = "4.6.1", features = ["derive", "env"] }
+clap = { version = "4.6.6", features = ["derive", "env"] }
 
 # Graphics and Formats
-resvg = "0.47.0"
-tiny-skia = "0.11"
-image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+resvg = "0.48.1"
+tiny-skia = "0.12.0"
+image = { version = "0.25.10", default-features = false, features = [
+    "png",
+    "jpeg",
+    "webp",
+] }
 ico = "0.5.0"
-ravif = { version = "0.11.5", default-features = false }
-webp = "0.3"
-imgref = "1.12.1"
+ravif = { version = "0.13.0", default-features = false }
+webp = "0.3.1"
+imgref = "1.12.3"
 pdfium-render = { version = "0.8.37", features = ["image_025"] }
-pdfium-auto = "0.3.0"
+pdfium-auto = "0.3.1"
 
 # Concurrency & Progress
-rayon = "1.10"
-indicatif = { version = "0.17.8", features = ["rayon"] }
+rayon = "1.12.0"
+indicatif = { version = "0.18.6", features = ["rayon"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Error handling and logs
-thiserror = "2.0.18"
-anyhow = "1.0"
+thiserror = "2.0.20"
+anyhow = "1.0.104"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 glob = "0.3"
 
-# Markdown and Word
-docx-rs = "0.4.15"
-pulldown-cmark = "0.12.1"
+# Markdown, Typst, and Word
+docx-rs = "0.4.22"
+pulldown-cmark = "0.13.4"
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-kit = { version = "0.15.1", default-features = false, features = [
+    "scan-fonts",
+    "embedded-fonts",
+    "system-files",
+] }
+fontdb = "0.24"
+
 
 [dev-dependencies]
-assert_cmd = "2.0"
+assert_cmd = "2.2.2"
 predicates = "3.1"
-tempfile = "3.10"
+tempfile = "3.27.0"
 
 [profile.release]
 opt-level = 3
