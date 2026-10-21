@@ -290,7 +290,9 @@ fn encode_avif(img: &DynamicImage, quality: u8, lossless: bool) -> Result<Vec<u8
     let raw_pixels = rgba_img.as_raw();
 
     let pixels: Vec<ravif::RGBA8> = raw_pixels
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|c| ravif::RGBA8 {
             r: c[0],
             g: c[1],
@@ -341,11 +343,8 @@ pub(crate) fn render_svg_to_rgba(
 
 fn demultiply_alpha(data: &[u8]) -> Vec<u8> {
     let mut unpremultiplied = Vec::with_capacity(data.len());
-    for chunk in data.chunks_exact(4) {
-        let r = chunk[0];
-        let g = chunk[1];
-        let b = chunk[2];
-        let a = chunk[3];
+    for chunk in data.as_chunks::<4>().0 {
+        let [r, g, b, a] = *chunk;
         if a == 0 {
             unpremultiplied.extend_from_slice(&[0, 0, 0, 0]);
         } else {

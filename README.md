@@ -41,18 +41,23 @@ The compiled binary will be located at `target/release/martini`.
 ## CLI Usage
 
 ### 1. View Supported Formats
+
 Retrieve supported format pairs and metadata (default outputs JSON structure):
+
 ```bash
 martini list-formats
 ```
 
 Or structured JSON:
+
 ```bash
 martini list-formats --json
 ```
 
 ### 2. Convert Single Files (Simplified Syntax)
+
 Martini automatically detects source and target formats from file extensions. Both concise positional arguments (`martini convert <input> [output]`) and named flags (`-i`, `-o`) are supported. Furthermore, `convert` is the default subcommand:
+
 ```bash
 # Convert PDF to PNG images (default 150 DPI, outputs test_page_1.png, ...)
 martini convert test.pdf
@@ -73,7 +78,9 @@ martini convert -i logo.png -o ./icons_dir --package
 ```
 
 ### 3. Batch Convert a Directory
+
 Concurrently convert all images or documents in a folder:
+
 ```bash
 # Convert all PNG/JPG images in the directory to WebP
 martini convert -i ./images --to webp
@@ -86,7 +93,9 @@ martini convert -i ./images --to both -r --delete-original
 ```
 
 ### 4. Convert PDF to Images
+
 Extract pages of a PDF document to raster image formats (PNG, JPEG, WebP, AVIF) at custom resolutions:
+
 ```bash
 # Convert all pages of a PDF to PNG at default 150 DPI
 martini convert -i report.pdf -o report.png
@@ -97,10 +106,13 @@ martini convert -i doc.pdf -o output.jpg --pages "1,3-5" --dpi 300
 # Batch convert a folder of PDFs to WebP
 martini convert -i ./pdfs -o ./images --from pdf --to webp
 ```
+
 *Note: Output files are named with page suffixes, e.g., `output_page_1.jpg`, `output_page_2.jpg`.*
 
 ### 5. Image Resizing
+
 Resize standard images, SVG vector images, or PDF pages on conversion:
+
 ```bash
 # Resize PNG to width 400 (aspect ratio is maintained automatically)
 martini convert -i input.png -o output.png --width 400
@@ -113,7 +125,9 @@ martini convert -i small.jpg -o output.jpg --height 300 --no-upscale
 ```
 
 ### 6. Convert Markdown to PDF
+
 Convert Markdown files (`.md`, `.markdown`) directly to high-fidelity PDF documents with the embedded Pure Rust Typst engine:
+
 ```bash
 # Convert Markdown to PDF (defaults to pdf when input is .md)
 martini convert -i document.md
@@ -129,12 +143,16 @@ martini convert -i paper.md -o paper.pdf --theme academic
 ```
 
 ### 7. Convert Markdown to Word (DOCX)
+
 Convert Markdown files directly to Microsoft Word (`.docx`) files:
+
 ```bash
 # Convert markdown to docx explicitly
 martini convert -i document.md -o document.docx --to docx
 ```
+
 LaTeX math equations (enclosed in `$` for inline math or `$$` for display math) are parsed natively and rendered styled in Word:
+
 ```markdown
 $$DCF = \sum_{t=1}^{n} \frac{FCF_t}{(1+WACC)^t} + \frac{FCF_n \times (1+g)}{(WACC - g) \times (1+WACC)^n}$$
 ```
@@ -148,11 +166,13 @@ Martini is designed to be easily wrapped as a tool or skill for LLM agents.
 ### Example Tool Invocation
 
 An agent can discover capabilities first:
+
 ```bash
 martini list-formats --json
 ```
 
 Output:
+
 ```json
 [
   {
@@ -180,11 +200,13 @@ Output:
 ```
 
 Then perform the conversion in JSON mode:
+
 ```bash
 martini convert -i test.svg -o out.ico --json
 ```
 
 Output on `stdout`:
+
 ```json
 {
   "from": "svg",
@@ -204,7 +226,7 @@ Output on `stdout`:
 Programmatic automation can rely on the following exit codes:
 
 | Code | Label | Description |
-|---|---|---|
+| --- | --- | --- |
 | **0** | `SUCCESS` | Conversion or command completed successfully. |
 | **1** | `INVALID_ARGUMENTS` | Command line arguments parsing failed. |
 | **2** | `INPUT_FILE_NOT_FOUND` | The specified input path does not exist. |
