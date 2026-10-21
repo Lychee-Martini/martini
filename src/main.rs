@@ -12,8 +12,35 @@ use martini::error::MartiniError;
 use martini::{BatchConvertOptions, batch_convert};
 use std::sync::Arc;
 
+fn normalize_args<I, T>(raw_args: I) -> Vec<std::ffi::OsString>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString>,
+{
+    let args: Vec<std::ffi::OsString> = raw_args.into_iter().map(Into::into).collect();
+    if args.len() <= 1 {
+        return args;
+    }
+    let has_subcommand_or_root_help = args.iter().skip(1).any(|arg| {
+        arg.to_str().is_some_and(|s| {
+            matches!(
+                s,
+                "convert" | "list-formats" | "help" | "--help" | "-h" | "--version" | "-V"
+            )
+        })
+    });
+
+    if !has_subcommand_or_root_help {
+        let mut modified = args;
+        modified.insert(1, std::ffi::OsString::from("convert"));
+        modified
+    } else {
+        args
+    }
+}
+
 fn main() {
-    let args = CliArgs::parse();
+    let args = CliArgs::parse_from(normalize_args(std::env::args_os()));
     let is_json = args.json;
 
     // 1. Initialize logging
@@ -98,7 +125,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             from,
             to,
             input,
+            input_flag,
             output,
+            output_flag,
             package,
             quality,
             lossless,
@@ -120,6 +149,10 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             no_page_numbers,
             toc,
         } => {
+            let input = input
+                .or(input_flag)
+                .expect("Input must be provided either as positional argument or via --input");
+            let output = output.or(output_flag);
             let input_str = input.to_string_lossy();
             let is_glob = is_glob_pattern(&input);
 
@@ -508,5 +541,63 @@ fn get_glob_base(pattern: &str) -> std::path::PathBuf {
         }
     } else {
         std::path::PathBuf::from(".")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_args_default_subcommand() {
+        let args = vec!["martini", "test.pdf"];
+        let normalized = normalize_args(args);
+        let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
+        assert_eq!(strs, vec!["martini", "convert", "test.pdf"]);
+    }
+
+    #[test]
+    fn test_normalize_args_already_convert() {
+        let args = vec!["martini", "convert", "test.pdf"];
+        let normalized = normalize_args(args);
+        let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
+        assert_eq!(strs, vec!["martini", "convert", "test.pdf"]);
+    }
+
+    #[test]
+    fn test_normalize_args_list_formats() {
+        let args = vec!["martini", "list-formats"];
+        let normalized = normalize_args(args);
+        let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
+        assert_eq!(strs, vec!["martini", "list-formats"]);
+    }
+
+    #[test]
+    fn test_normalize_args_help_flags() {
+        let args = vec!["martini", "--help"];
+        let normalized = normalize_args(args);
+        let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
+        assert_eq!(strs, vec!["martini", "--help"]);
+
+        let args_h = vec!["martini", "-h"];
+        let normalized_h = normalize_args(args_h);
+        let strs_h: Vec<_> = normalized_h.iter().map(|s| s.to_str().unwrap()).collect();
+        assert_eq!(strs_h, vec!["martini", "-h"]);
+    }
+
+    #[test]
+    fn test_normalize_args_version_flags() {
+        let args = vec!["martini", "--version"];
+        let normalized = normalize_args(args);
+        let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
+        assert_eq!(strs, vec!["martini", "--version"]);
+    }
+
+    #[test]
+    fn test_normalize_args_empty_or_single() {
+        let args = vec!["martini"];
+        let normalized = normalize_args(args);
+        let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
+        assert_eq!(strs, vec!["martini"]);
     }
 }

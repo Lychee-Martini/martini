@@ -36,13 +36,36 @@ pub enum Commands {
         #[arg(long)]
         to: Option<String>,
 
-        /// Path to the input file or directory
-        #[arg(short, long)]
-        input: PathBuf,
+        /// Path to the input file or directory (positional)
+        #[arg(
+            value_name = "INPUT",
+            conflicts_with = "input_flag",
+            required_unless_present = "input_flag"
+        )]
+        input: Option<PathBuf>,
 
-        /// Path to the output file or directory (optional)
-        #[arg(short, long)]
+        /// Path to the input file or directory (flag)
+        #[arg(
+            short = 'i',
+            long = "input",
+            value_name = "INPUT",
+            conflicts_with = "input",
+            required_unless_present = "input"
+        )]
+        input_flag: Option<PathBuf>,
+
+        /// Path to the output file or directory (positional, optional)
+        #[arg(value_name = "OUTPUT", conflicts_with = "output_flag")]
         output: Option<PathBuf>,
+
+        /// Path to the output file or directory (flag, optional)
+        #[arg(
+            short = 'o',
+            long = "output",
+            value_name = "OUTPUT",
+            conflicts_with = "output"
+        )]
+        output_flag: Option<PathBuf>,
 
         /// Generate a full favicon package instead of a single .ico file (only for SVG -> favicon)
         #[arg(long)]

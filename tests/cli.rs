@@ -736,3 +736,92 @@ fn test_batch_convert_md_to_pdf() {
     let bytes1 = fs::read(output_dir.join("doc1.pdf")).unwrap();
     assert!(bytes1.starts_with(b"%PDF"));
 }
+
+#[test]
+fn test_convert_positional_pdf_default_output() {
+    let _lock = PDFIUM_LOCK.lock().unwrap();
+    use pdfium_render::prelude::*;
+
+    let temp_dir = tempdir().unwrap();
+    let input_pdf = temp_dir.path().join("test_doc.pdf");
+
+    let pdfium = get_pdfium_for_test();
+    let mut document = pdfium.create_new_pdf().expect("Failed to create new PDF");
+    document
+        .pages_mut()
+        .create_page_at_end(PdfPagePaperSize::a4())
+        .expect("Failed to create page 1");
+
+    let pdf_bytes = document
+        .save_to_bytes()
+        .expect("Failed to save PDF to bytes");
+    fs::write(&input_pdf, &pdf_bytes).expect("Failed to write test PDF");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert").arg(&input_pdf).assert().success();
+
+    let out_page = temp_dir.path().join("test_doc_page_1.png");
+    assert!(out_page.exists());
+    let output_img = image::open(&out_page).unwrap();
+    assert!(output_img.width() > 0);
+}
+
+#[test]
+fn test_convert_positional_input_and_output() {
+    let temp_dir = tempdir().unwrap();
+    let out_png = temp_dir.path().join("positional_output.png");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("tests/fixtures/sample.svg")
+        .arg(&out_png)
+        .assert()
+        .success();
+
+    assert!(out_png.exists());
+    let output_img = image::open(&out_png).unwrap();
+    assert!(output_img.width() > 0);
+}
+
+#[test]
+fn test_default_subcommand_positional() {
+    let temp_dir = tempdir().unwrap();
+    let out_png = temp_dir.path().join("default_subcmd_out.png");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("tests/fixtures/sample.svg")
+        .arg(&out_png)
+        .assert()
+        .success();
+
+    assert!(out_png.exists());
+}
+
+#[test]
+fn test_positional_and_flag_input_conflict() {
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("tests/fixtures/sample.svg")
+        .arg("-i")
+        .arg("tests/fixtures/sample.svg")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn test_positional_and_flag_output_conflict() {
+    let temp_dir = tempdir().unwrap();
+    let out1 = temp_dir.path().join("out1.png");
+    let out2 = temp_dir.path().join("out2.png");
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("tests/fixtures/sample.svg")
+        .arg(&out1)
+        .arg("-o")
+        .arg(&out2)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}

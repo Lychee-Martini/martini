@@ -52,16 +52,24 @@ martini list-formats --json
 ```
 
 ### 2. Convert Single Files (Simplified Syntax)
-Martini automatically detects source and target formats from file extensions:
+Martini automatically detects source and target formats from file extensions. Both concise positional arguments (`martini convert <input> [output]`) and named flags (`-i`, `-o`) are supported. Furthermore, `convert` is the default subcommand:
 ```bash
-# Convert SVG to PNG (auto-detects 'svg' and 'png')
-martini convert -i logo.svg -o logo.png
+# Convert PDF to PNG images (default 150 DPI, outputs test_page_1.png, ...)
+martini convert test.pdf
+# Or even shorter (convert is the default command):
+martini test.pdf
 
-# Convert PNG to favicon package (auto-detects 'png' and 'favicon')
-martini convert -i logo.png -o ./icons_dir --package
+# Convert SVG to PNG using positional arguments
+martini convert logo.svg logo.png
+# Or directly:
+martini logo.svg logo.png
 
 # Convert JPG to WebP in-place (defaults to webp target and in-place output)
-martini convert -i photo.jpg
+martini photo.jpg
+
+# Named flags syntax (-i / -o) is also 100% supported
+martini convert -i logo.svg -o logo.png
+martini convert -i logo.png -o ./icons_dir --package
 ```
 
 ### 3. Batch Convert a Directory
