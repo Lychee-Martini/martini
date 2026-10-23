@@ -1,6 +1,6 @@
 [package]
 name = "martini"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Lychee Martini <info@lycheemartini.com>"]
 description = "A modern, extensible CLI format converter built in Rust and optimized for Agent Skills."

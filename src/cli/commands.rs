@@ -4,7 +4,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(name = "martini")]
 #[command(author = "Lychee Martini <info@lycheemartini.com>")]
-#[command(version = "0.1.0")]
+#[command(version)]
 #[command(about = "A modern, extensible CLI format converter optimized for Agent Skills", long_about = None)]
 pub struct CliArgs {
     /// Enable verbose logging (debug level)
