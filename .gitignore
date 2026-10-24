@@ -27,3 +27,5 @@ target
 
 docs/superpowers
 .superpowers/
+martini.rb
+test-homebrew.ps1
