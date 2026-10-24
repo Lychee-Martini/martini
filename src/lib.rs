@@ -1,6 +1,8 @@
 pub mod cli;
 pub mod converter;
 pub mod error;
+pub mod preset;
+
 
 pub use converter::batch::{
     BatchConvertOptions, BatchResult, ProgressTracker, TaskResult, batch_convert,

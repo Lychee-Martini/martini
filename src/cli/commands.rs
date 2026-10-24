@@ -146,8 +146,30 @@ pub enum Commands {
         /// Automatically generate Table of Contents in PDF
         #[arg(long)]
         toc: bool,
+
+        /// Apply a named preset from martini-presets.toml
+        #[arg(long)]
+        preset: Option<String>,
     },
 
     /// List all supported format conversions and their parameters
     ListFormats,
+
+    /// Manage and inspect conversion presets
+    Preset {
+        #[command(subcommand)]
+        action: PresetAction,
+    },
 }
+
+#[derive(Subcommand, Debug)]
+pub enum PresetAction {
+    /// List all available presets
+    List,
+    /// Show detailed configuration of a preset
+    Show {
+        /// Name of the preset
+        name: String,
+    },
+}
+

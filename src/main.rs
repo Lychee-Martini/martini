@@ -25,10 +25,19 @@ where
         arg.to_str().is_some_and(|s| {
             matches!(
                 s,
-                "convert" | "list-formats" | "help" | "--help" | "-h" | "--version" | "-V"
+                "convert"
+                    | "list-formats"
+                    | "preset"
+                    | "watch"
+                    | "help"
+                    | "--help"
+                    | "-h"
+                    | "--version"
+                    | "-V"
             )
         })
     });
+
 
     if !has_subcommand_or_root_help {
         let mut modified = args;
@@ -129,18 +138,55 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             }
             Ok(0)
         }
+        Commands::Preset { action } => {
+            let manager = martini::preset::PresetManager::load();
+            match action {
+                martini::cli::commands::PresetAction::List => {
+                    let presets = manager.list();
+                    if args.json {
+                        println!("{}", serde_json::to_string_pretty(&presets).unwrap());
+                    } else {
+                        println!("Available Presets:");
+                        if presets.is_empty() {
+                            println!("  (No presets found. Create martini-presets.toml to add presets)");
+                        } else {
+                            for (name, preset) in presets {
+                                println!(
+                                    "- {}: to={}, quality={:?}, lossless={:?}",
+                                    name, preset.to, preset.quality, preset.lossless
+                                );
+                            }
+                        }
+                    }
+                }
+                martini::cli::commands::PresetAction::Show { name } => {
+                    if let Some(preset) = manager.get(&name) {
+                        if args.json {
+                            println!("{}", serde_json::to_string_pretty(preset).unwrap());
+                        } else {
+                            println!("Preset '{}':\n{:#?}", name, preset);
+                        }
+                    } else {
+                        return Err(MartiniError::InvalidInputData {
+                            reason: format!("Preset '{}' not found", name),
+                        });
+                    }
+                }
+            }
+            Ok(0)
+        }
         Commands::Convert {
-            from,
-            to,
+            mut from,
+            mut to,
             input,
             input_flag,
             output,
             output_flag,
             package,
-            quality,
-            lossless,
-            recursive,
-            delete_original,
+            mut quality,
+            mut lossless,
+            mut recursive,
+            mut delete_original,
             overwrite,
             workers,
             pages,
@@ -148,17 +194,53 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             width,
             height,
             no_upscale,
-            theme,
-            paper_size,
+            mut theme,
+            mut paper_size,
             margin,
             font_family,
             header,
             footer,
             no_page_numbers,
             toc,
+            preset,
         } => {
+            if let Some(ref p_name) = preset {
+                let manager = martini::preset::PresetManager::load();
+                if let Some(p) = manager.get(p_name) {
+                    if from == "auto" && let Some(ref f) = p.from {
+                        from = f.clone();
+                    }
+                    if to.is_none() {
+                        to = Some(p.to.clone());
+                    }
+                    if let Some(q) = p.quality {
+                        quality = q;
+                    }
+                    if let Some(l) = p.lossless {
+                        lossless = l;
+                    }
+                    if let Some(r) = p.recursive {
+                        recursive = r;
+                    }
+                    if let Some(d) = p.delete_original {
+                        delete_original = d;
+                    }
+                    if theme.is_none() && p.theme.is_some() {
+                        theme = p.theme.clone();
+                    }
+                    if paper_size.is_none() && p.paper_size.is_some() {
+                        paper_size = p.paper_size.clone();
+                    }
+                } else {
+                    return Err(MartiniError::InvalidInputData {
+                        reason: format!("Preset '{}' not found", p_name),
+                    });
+                }
+            }
+
             let input = input
                 .or(input_flag)
+
                 .expect("Input must be provided either as positional argument or via --input");
             let output = output.or(output_flag);
             let input_str = input.to_string_lossy();
