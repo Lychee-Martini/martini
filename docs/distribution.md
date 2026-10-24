@@ -11,11 +11,13 @@ Martini is distributed through multiple package managers and binary formats to p
 Standalone single-command installation that automatically selects and installs the matching binary for your OS and architecture:
 
 #### macOS & Linux (Shell)
+
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Lychee-Martini/martini/releases/latest/download/martini-installer.sh | sh
 ```
 
 #### Windows (PowerShell)
+
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/Lychee-Martini/martini/releases/latest/download/martini-installer.ps1 | iex"
 ```
