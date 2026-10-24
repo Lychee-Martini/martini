@@ -23,11 +23,10 @@ path = "src/main.rs"
 
 [dependencies]
 # CLI Parsing
-clap = { version = "4.6.6", features = ["derive", "env"] }
+clap = { version = "4.6.7", features = ["derive", "env"] }
 
 # Graphics and Formats
-resvg = "0.48.1"
-tiny-skia = "0.12.0"
+resvg = "0.49.0"
 image = { version = "0.25.10", default-features = false, features = [
     "png",
     "jpeg",
@@ -37,7 +36,7 @@ image = { version = "0.25.10", default-features = false, features = [
     "qoi",
 ] }
 
-ico = "0.5.0"
+ico = "0.6.0"
 ravif = { version = "0.13.0", default-features = false }
 webp = "0.3.1"
 imgref = "1.12.3"
@@ -52,29 +51,27 @@ indicatif = { version = "0.18.6", features = ["rayon"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-toml = "0.8"
-csv = "1.3"
+toml = "1.1.8"
+csv = "1.4.0"
 
 # Archives and Compression
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
-tar = "0.4"
-flate2 = "1.0"
+zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
+tar = "0.4.46"
+flate2 = "1.1.10"
 tempfile = "3.27.0"
 # File watching
-notify = "8.0"
-
-
+notify = "8.2.0"
 
 
 # Error handling and logs
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 glob = "0.3"
 
 # Markdown, Typst, and Word
 docx-rs = "0.4.22"
-pulldown-cmark = "0.13.4"
+pulldown-cmark = "0.13.5"
 typst = "0.15.1"
 typst-pdf = "0.15.1"
 typst-kit = { version = "0.15.1", default-features = false, features = [
