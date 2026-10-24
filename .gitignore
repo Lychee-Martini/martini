@@ -31,3 +31,7 @@ martini.rb
 test-homebrew.ps1
 publish-winget.ps1
 target/winget-manifests/
+
+# cargo-dist generated installers (built dynamically in CI upon release)
+*-installer.sh
+*-installer.ps1
