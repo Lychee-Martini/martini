@@ -8,9 +8,12 @@ pub struct EngineRegistry {
 
 impl Default for EngineRegistry {
     fn default() -> Self {
-        Self::empty()
+        let mut registry = Self::empty();
+        registry.register(Box::new(super::data::DataEngine));
+        registry
     }
 }
+
 
 impl EngineRegistry {
     pub fn empty() -> Self {
