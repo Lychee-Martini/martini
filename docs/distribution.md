@@ -6,7 +6,25 @@ Martini is distributed through multiple package managers and binary formats to p
 
 ## 🚀 User Installation Guide
 
-### 1. Homebrew (macOS & Linux)
+### 1. ⚡ Cross-Platform Quick Installers (cargo-dist)
+
+Standalone single-command installation that automatically selects and installs the matching binary for your OS and architecture:
+
+#### macOS & Linux (Shell)
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Lychee-Martini/martini/releases/latest/download/martini-installer.sh | sh
+```
+
+#### Windows (PowerShell)
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Lychee-Martini/martini/releases/latest/download/martini-installer.ps1 | iex"
+```
+
+---
+
+### 2. Homebrew (macOS & Linux)
 
 For macOS (Apple Silicon and Intel) as well as Linux:
 
@@ -19,7 +37,7 @@ brew install martini
 brew install Lychee-Martini/tap/martini
 ```
 
-### 2. Windows Package Manager (WinGet)
+### 3. Windows Package Manager (WinGet)
 
 For Windows 10/11:
 
@@ -27,7 +45,7 @@ For Windows 10/11:
 winget install LycheeMartini.Martini
 ```
 
-### 3. Cargo (crates.io)
+### 4. Cargo (crates.io)
 
 Ensure you have Rust and Cargo installed:
 
@@ -37,7 +55,7 @@ cargo install martini-cli
 
 > **Note:** The package name on crates.io is `martini-cli`, and the installed binary is `martini`.
 
-### 4. Debian / Ubuntu (APT `.deb`)
+### 5. Debian / Ubuntu (APT `.deb`)
 
 Download the latest `.deb` package from [GitHub Releases](https://github.com/Lychee-Martini/martini/releases):
 
@@ -46,7 +64,7 @@ Download the latest `.deb` package from [GitHub Releases](https://github.com/Lyc
 sudo apt install ./martini_0.1.1-1_amd64.deb
 ```
 
-### 5. Fedora / RHEL / CentOS (YUM / DNF `.rpm`)
+### 6. Fedora / RHEL / CentOS (YUM / DNF `.rpm`)
 
 Download the latest `.rpm` package from [GitHub Releases](https://github.com/Lychee-Martini/martini/releases):
 
@@ -55,9 +73,10 @@ Download the latest `.rpm` package from [GitHub Releases](https://github.com/Lyc
 sudo dnf install ./martini-0.1.1-1.x86_64.rpm
 ```
 
-### 6. Pre-compiled Archives (GitHub Releases)
+### 7. Pre-compiled Archives (GitHub Releases)
 
 Pre-compiled standalone binaries with zero system dependencies are available for:
+
 - **Linux**: `x86_64-linux-gnu`, `x86_64-linux-musl`, `aarch64-linux-gnu`, `aarch64-linux-musl`
 - **macOS**: `x86_64-macos` (Intel), `aarch64-macos` (Apple Silicon)
 - **Windows**: `x86_64-windows`, `i386-windows`, `aarch64-windows`
@@ -75,7 +94,7 @@ Automated releases are triggered whenever a version tag matching `v*` (e.g. `v0.
 Configure the following secrets in **Settings > Secrets and variables > Actions**:
 
 | Secret Name | Purpose | How to Generate |
-|-------------|---------|-----------------|
+| ------------- | --------- | ----------------- |
 | `CARGO_REGISTRY_TOKEN` | Publishes `martini-cli` to [crates.io](https://crates.io/) | [crates.io Account Settings > API Tokens](https://crates.io/settings/tokens). Generate a token with `publish-update` or `publish-new` permissions. |
 | `HOMEBREW_TAP_TOKEN` | Bumps `Formula/martini.rb` in `Lychee-Martini/homebrew-tap` | [GitHub Personal Access Token](https://github.com/settings/tokens) with `repo` or fine-grained `contents:write` permission on the `homebrew-tap` repository. |
 | `WINGET_TOKEN` | Submits automated manifest PRs to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) | [GitHub Personal Access Token](https://github.com/settings/tokens) with `public_repo` permission to fork and submit PRs. |
@@ -83,7 +102,7 @@ Configure the following secrets in **Settings > Secrets and variables > Actions*
 ### Release Flow & Fallback Behavior
 
 1. **Compilation & Archives**: `upload-assets` cross-compiles all 9 platform targets and attaches `.tar.gz` and `.zip` archives.
-2. **Native Packages**: `package-linux` builds `.deb` and `.rpm` packages statically linked with musl and attaches them to the release.
+2. **Native Packages & Installers**: `package-linux` builds `.deb` and `.rpm` packages statically linked with musl, generates cross-platform `cargo-dist` installers (`martini-installer.sh` and `martini-installer.ps1`), and attaches them to the release.
 3. **Draft Release Publication**: `publish-release` turns the draft release into an active public release.
 4. **Channel Distribution**:
    - `publish-cargo` runs `cargo publish`.

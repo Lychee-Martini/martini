@@ -80,6 +80,11 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 [package.metadata.deb]
 name = "martini"
 maintainer = "Lychee Martini <info@lycheemartini.com>"
@@ -92,9 +97,21 @@ Supports images (PNG, JPEG, WebP, AVIF, SVG, ICO), PDF to images, and Markdown t
 section = "utils"
 priority = "optional"
 assets = [
-    ["target/release/martini", "usr/bin/martini", "755"],
-    ["README.md", "usr/share/doc/martini/README.md", "644"],
-    ["LICENSE", "usr/share/doc/martini/copyright", "644"],
+    [
+        "target/release/martini",
+        "usr/bin/martini",
+        "755",
+    ],
+    [
+        "README.md",
+        "usr/share/doc/martini/README.md",
+        "644",
+    ],
+    [
+        "LICENSE",
+        "usr/share/doc/martini/copyright",
+        "644",
+    ],
 ]
 
 [package.metadata.generate-rpm]
@@ -106,4 +123,3 @@ assets = [
     { source = "README.md", dest = "/usr/share/doc/martini/README.md", mode = "644", doc = true },
     { source = "LICENSE", dest = "/usr/share/licenses/martini/LICENSE", mode = "644" },
 ]
-

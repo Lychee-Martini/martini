@@ -29,3 +29,5 @@ docs/superpowers
 .superpowers/
 martini.rb
 test-homebrew.ps1
+publish-winget.ps1
+target/winget-manifests/
