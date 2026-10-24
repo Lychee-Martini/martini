@@ -2,30 +2,11 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use std::sync::Mutex;
-use std::sync::Once;
 use tempfile::tempdir;
-
-static PDFIUM_INIT: Once = Once::new();
 static PDFIUM_LOCK: Mutex<()> = Mutex::new(());
 
-fn get_pdfium_for_test() -> pdfium_render::prelude::Pdfium {
-    match pdfium_auto::bind_pdfium_silent() {
-        Ok(pdfium) => pdfium,
-        Err(e) => {
-            let err_msg = format!("{:?}", e);
-            if let Some(path_start) = err_msg.find("path: \"") {
-                let path_part = &err_msg[path_start + 7..];
-                if let Some(path_end) = path_part.find('"') {
-                    let path = &path_part[..path_end];
-                    let std_path = std::path::Path::new(path);
-                    if std_path.is_file() {
-                        let _ = std::fs::remove_file(std_path);
-                    }
-                }
-            }
-            pdfium_auto::bind_pdfium_silent().expect("Failed to load PDFium after cleaning cache")
-        }
-    }
+fn get_pdfium_for_test() -> &'static pdfium_render::prelude::Pdfium {
+    martini::converter::pdf_conv::get_pdfium().expect("Failed to initialize PDFium for test")
 }
 
 #[test]
@@ -366,10 +347,7 @@ fn test_convert_pdf_to_images() {
 #[test]
 fn test_pdfium_thread_safety() {
     let _lock = PDFIUM_LOCK.lock().unwrap();
-    // Initialize PDFium once before spawning threads
-    PDFIUM_INIT.call_once(|| {
-        let _ = get_pdfium_for_test();
-    });
+    let _ = get_pdfium_for_test();
 
     let threads: Vec<_> = (0..3)
         .map(|_| {

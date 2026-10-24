@@ -1,47 +1,41 @@
-use pdfium_auto::bind_pdfium_silent;
 use pdfium_render::prelude::*;
 use std::fs;
+use std::sync::OnceLock;
 
 use crate::converter::image_conv::encode_image;
 use crate::converter::{ConversionResult, ConvertOptions, Format, OutputFileMetadata};
 use crate::error::MartiniError;
 
-pub struct ThreadSafePdfium(pub Pdfium);
-unsafe impl Send for ThreadSafePdfium {}
-unsafe impl Sync for ThreadSafePdfium {}
-
-static PDFIUM: std::sync::Mutex<Option<&'static ThreadSafePdfium>> = std::sync::Mutex::new(None);
+static PDFIUM: OnceLock<Pdfium> = OnceLock::new();
 
 pub fn get_pdfium() -> Result<&'static Pdfium, MartiniError> {
-    let mut lock = PDFIUM.lock().unwrap();
-    if let Some(ts_pdfium) = *lock {
-        return Ok(&ts_pdfium.0);
+    if let Some(pdfium) = PDFIUM.get() {
+        return Ok(pdfium);
     }
 
-    match bind_pdfium_silent() {
-        Ok(pdfium) => {
-            let static_ref = Box::leak(Box::new(ThreadSafePdfium(pdfium)));
-            *lock = Some(static_ref);
-            Ok(&static_ref.0)
-        }
+    let lib_path = pdfium_auto::ensure_pdfium_library(None).map_err(|e| {
+        MartiniError::PdfRender(format!("Failed to locate/download PDFium library: {:?}", e))
+    })?;
+
+    let bindings = match Pdfium::bind_to_library(&lib_path) {
+        Ok(b) => b,
         Err(e) => {
-            let err_msg = format!("{:?}", e);
-            if let Some(path_start) = err_msg.find("path: \"") {
-                let path_part = &err_msg[path_start + 7..];
-                if let Some(path_end) = path_part.find('"') {
-                    let path = &path_part[..path_end];
-                    let std_path = std::path::Path::new(path);
-                    if std_path.is_file() {
-                        let _ = std::fs::remove_file(std_path);
-                    }
-                }
+            if lib_path.is_file() {
+                let _ = fs::remove_file(&lib_path);
             }
-            Err(MartiniError::PdfRender(format!(
-                "Failed to load PDFium library: {:?}",
-                e
-            )))
+            let fresh_path = pdfium_auto::ensure_pdfium_library(None).map_err(|e2| {
+                MartiniError::PdfRender(format!("Failed to re-download PDFium library: {:?}", e2))
+            })?;
+            Pdfium::bind_to_library(&fresh_path).map_err(|e2| {
+                MartiniError::PdfRender(format!(
+                    "Failed to load PDFium library: {:?} (retry: {:?})",
+                    e, e2
+                ))
+            })?
         }
-    }
+    };
+
+    Ok(PDFIUM.get_or_init(|| Pdfium::new(bindings)))
 }
 
 pub fn convert_pdf(
@@ -60,7 +54,7 @@ pub fn convert_pdf(
         })?;
 
     let total_pages = document.pages().len();
-    if total_pages == 0 {
+    if total_pages <= 0 {
         return Err(MartiniError::InvalidInputData {
             reason: "PDF document has no pages".to_string(),
         });
@@ -112,7 +106,13 @@ pub fn convert_pdf(
         let img = page.render_with_config(&render_config).map_err(|e| {
             MartiniError::PdfRender(format!("Failed to render page {}: {:?}", page_index + 1, e))
         })?;
-        let mut dynamic_img = img.as_image();
+        let mut dynamic_img = img.as_image().map_err(|e| {
+            MartiniError::PdfRender(format!(
+                "Failed to convert rendered page {} to image: {:?}",
+                page_index + 1,
+                e
+            ))
+        })?;
         if options.width.is_some() || options.height.is_some() {
             let (w, h) = crate::converter::image_conv::calculate_dimensions(
                 dynamic_img.width(),
@@ -186,7 +186,7 @@ pub fn convert_pdf(
     })
 }
 
-pub fn parse_pages(pages_str: &str, total_pages: u16) -> Result<Vec<u16>, String> {
+pub fn parse_pages(pages_str: &str, total_pages: i32) -> Result<Vec<i32>, String> {
     let mut pages = Vec::new();
     for part in pages_str.split(',') {
         let part = part.trim();
@@ -200,13 +200,13 @@ pub fn parse_pages(pages_str: &str, total_pages: u16) -> Result<Vec<u16>, String
             }
             let start = bounds[0]
                 .trim()
-                .parse::<u16>()
+                .parse::<i32>()
                 .map_err(|_| format!("Invalid page number: {}", bounds[0]))?;
             let end = bounds[1]
                 .trim()
-                .parse::<u16>()
+                .parse::<i32>()
                 .map_err(|_| format!("Invalid page number: {}", bounds[1]))?;
-            if start == 0 || end == 0 {
+            if start <= 0 || end <= 0 {
                 return Err("Page numbers must be 1-indexed and greater than 0".to_string());
             }
             if start > end {
@@ -222,9 +222,9 @@ pub fn parse_pages(pages_str: &str, total_pages: u16) -> Result<Vec<u16>, String
             }
         } else {
             let p = part
-                .parse::<u16>()
+                .parse::<i32>()
                 .map_err(|_| format!("Invalid page number: {}", part))?;
-            if p == 0 {
+            if p <= 0 {
                 return Err("Page numbers must be 1-indexed and greater than 0".to_string());
             }
             if p <= total_pages {
