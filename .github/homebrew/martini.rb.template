@@ -1,0 +1,36 @@
+class Martini < Formula
+  desc "A modern, extensible CLI format converter built in Rust and optimized for Agent Skills"
+  homepage "https://lycheemartini.com"
+  version "__VERSION__"
+  license "Apache-2.0"
+
+  on_macos do
+    if Hardware::CPU.intel?
+      url "https://github.com/Lychee-Martini/martini/releases/download/v#{version}/martini-v#{version}-x86_64-macos.tar.gz"
+      sha256 "__SHA256_X86_64_MACOS__"
+    end
+    if Hardware::CPU.arm?
+      url "https://github.com/Lychee-Martini/martini/releases/download/v#{version}/martini-v#{version}-aarch64-macos.tar.gz"
+      sha256 "__SHA256_AARCH64_MACOS__"
+    end
+  end
+
+  on_linux do
+    if Hardware::CPU.intel?
+      url "https://github.com/Lychee-Martini/martini/releases/download/v#{version}/martini-v#{version}-x86_64-linux-gnu.tar.gz"
+      sha256 "__SHA256_X86_64_LINUX__"
+    end
+    if Hardware::CPU.arm?
+      url "https://github.com/Lychee-Martini/martini/releases/download/v#{version}/martini-v#{version}-aarch64-linux-gnu.tar.gz"
+      sha256 "__SHA256_AARCH64_LINUX__"
+    end
+  end
+
+  def install
+    bin.install "martini"
+  end
+
+  test do
+    assert_match "martini", shell_output("#{bin}/martini --version")
+  end
+end

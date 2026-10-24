@@ -1,5 +1,5 @@
 [package]
-name = "martini"
+name = "martini-cli"
 version = "0.1.1"
 edition = "2024"
 authors = ["Lychee Martini <info@lycheemartini.com>"]
@@ -7,6 +7,10 @@ description = "A modern, extensible CLI format converter built in Rust and optim
 readme = "README.md"
 license = "Apache-2.0"
 homepage = "https://lycheemartini.com"
+repository = "https://github.com/Lychee-Martini/martini"
+documentation = "https://github.com/Lychee-Martini/martini"
+keywords = ["converter", "image", "pdf", "markdown", "agent-skill"]
+categories = ["command-line-utilities", "multimedia::images"]
 
 
 [lib]
@@ -75,3 +79,31 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[package.metadata.deb]
+name = "martini"
+maintainer = "Lychee Martini <info@lycheemartini.com>"
+copyright = "2026, Lychee Martini <info@lycheemartini.com>"
+license-file = ["LICENSE", "4"]
+extended-description = """\
+A modern, extensible CLI format converter built in Rust and optimized for Agent Skills. \
+Supports images (PNG, JPEG, WebP, AVIF, SVG, ICO), PDF to images, and Markdown to PDF/DOCX.\
+"""
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/martini", "usr/bin/martini", "755"],
+    ["README.md", "usr/share/doc/martini/README.md", "644"],
+    ["LICENSE", "usr/share/doc/martini/copyright", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "martini"
+summary = "A modern, extensible CLI format converter built in Rust and optimized for Agent Skills."
+license = "Apache-2.0"
+assets = [
+    { source = "target/release/martini", dest = "/usr/bin/martini", mode = "755" },
+    { source = "README.md", dest = "/usr/share/doc/martini/README.md", mode = "644", doc = true },
+    { source = "LICENSE", dest = "/usr/share/licenses/martini/LICENSE", mode = "644" },
+]
+

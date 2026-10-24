@@ -82,3 +82,154 @@ jobs:
           archive: martini-$tag-${{ matrix.suffix }}
           include: README.md,LICENSE
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  package-linux:
+    name: Package Linux (.deb & .rpm)
+    needs: [create-release, upload-assets]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install Packaging Tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
+
+      - name: Install musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-musl-packages
+
+      - name: Build musl binary
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Prepare Binary and Output Directory
+        run: |
+          mkdir -p target/release
+          mkdir -p target/packages
+          cp target/x86_64-unknown-linux-musl/release/martini target/release/martini
+
+      - name: Build .deb Package (APT)
+        run: cargo deb --no-build -o target/packages/
+
+      - name: Build .rpm Package (YUM/DNF)
+        run: cargo generate-rpm -o target/packages/
+
+      - name: Upload Linux Packages to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/packages/*.deb
+            target/packages/*.rpm
+
+  publish-release:
+    name: Publish Release
+    needs: [upload-assets, package-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark Release as Published
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+
+  publish-cargo:
+    name: Distribute to Cargo (crates.io)
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        if: env.CARGO_REGISTRY_TOKEN != ''
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --token "$CARGO_REGISTRY_TOKEN"
+
+      - name: Inform if CARGO_REGISTRY_TOKEN is not set
+        if: env.CARGO_REGISTRY_TOKEN == ''
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: echo "::warning ::CARGO_REGISTRY_TOKEN is not configured in repository secrets. Skipping crates.io publish."
+
+  publish-homebrew:
+    name: Distribute to Homebrew
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Update Homebrew Tap
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Processing Homebrew formula for version ${VERSION}..."
+
+          BASE_URL="https://github.com/Lychee-Martini/martini/releases/download/${GITHUB_REF_NAME}"
+
+          curl -sSL -o x86_64-macos.tar.gz "${BASE_URL}/martini-${GITHUB_REF_NAME}-x86_64-macos.tar.gz"
+          curl -sSL -o aarch64-macos.tar.gz "${BASE_URL}/martini-${GITHUB_REF_NAME}-aarch64-macos.tar.gz"
+          curl -sSL -o x86_64-linux.tar.gz "${BASE_URL}/martini-${GITHUB_REF_NAME}-x86_64-linux-gnu.tar.gz"
+          curl -sSL -o aarch64-linux.tar.gz "${BASE_URL}/martini-${GITHUB_REF_NAME}-aarch64-linux-gnu.tar.gz"
+
+          SHA_X86_64_MACOS=$(sha256sum x86_64-macos.tar.gz | awk '{print $1}')
+          SHA_AARCH64_MACOS=$(sha256sum aarch64-macos.tar.gz | awk '{print $1}')
+          SHA_X86_64_LINUX=$(sha256sum x86_64-linux.tar.gz | awk '{print $1}')
+          SHA_AARCH64_LINUX=$(sha256sum aarch64-linux.tar.gz | awk '{print $1}')
+
+          sed -e "s/__VERSION__/${VERSION}/g" \
+              -e "s/__SHA256_X86_64_MACOS__/${SHA_X86_64_MACOS}/g" \
+              -e "s/__SHA256_AARCH64_MACOS__/${SHA_AARCH64_MACOS}/g" \
+              -e "s/__SHA256_X86_64_LINUX__/${SHA_X86_64_LINUX}/g" \
+              -e "s/__SHA256_AARCH64_LINUX__/${SHA_AARCH64_LINUX}/g" \
+              .github/homebrew/martini.rb.template > martini.rb
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Lychee-Martini/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp martini.rb tap/Formula/martini.rb
+          cd tap
+          git add Formula/martini.rb
+          git commit -m "feat(formula): bump martini to ${GITHUB_REF_NAME}" || echo "No changes to commit"
+          git push origin main || git push origin master
+
+      - name: Inform if HOMEBREW_TAP_TOKEN is not set
+        if: env.HOMEBREW_TAP_TOKEN == ''
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: echo "::warning ::HOMEBREW_TAP_TOKEN is not configured in repository secrets. Skipping Homebrew tap update."
+
+  publish-winget:
+    name: Distribute to WinGet
+    needs: publish-release
+    runs-on: windows-latest
+    steps:
+      - name: Publish to WinGet
+        if: env.WINGET_TOKEN != ''
+        uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: LycheeMartini.Martini
+          token: ${{ secrets.WINGET_TOKEN }}
+
+      - name: Inform if WINGET_TOKEN is not set
+        if: env.WINGET_TOKEN == ''
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: Write-Host "::warning ::WINGET_TOKEN is not configured in repository secrets. Skipping WinGet submission."
