@@ -160,7 +160,51 @@ pub enum Commands {
         #[command(subcommand)]
         action: PresetAction,
     },
+
+    /// Watch a directory and automatically convert incoming files
+    Watch {
+        /// Path to the input directory to watch (inbox)
+        #[arg(short = 'i', long = "input", value_name = "INPUT")]
+        input: PathBuf,
+
+        /// Path to the output directory (outbox)
+        #[arg(short = 'o', long = "output", value_name = "OUTPUT")]
+        output: PathBuf,
+
+        /// Apply a named preset from martini-presets.toml
+        #[arg(long)]
+        preset: Option<String>,
+
+        /// Target format to convert into (e.g. webp, yaml, json)
+        #[arg(long)]
+        to: Option<String>,
+
+        /// Settle time in milliseconds before processing a newly written file (default: 500)
+        #[arg(long, default_value_t = 500)]
+        settle_ms: u64,
+
+        /// Watch subdirectories recursively
+        #[arg(short, long)]
+        recursive: bool,
+
+        /// Process existing files in the directory on startup before watching
+        #[arg(long)]
+        initial: bool,
+
+        /// Delete original files after successful conversion
+        #[arg(long)]
+        delete_original: bool,
+
+        /// Move original files to a directory after conversion
+        #[arg(long, value_name = "DIR")]
+        move_originals: Option<PathBuf>,
+
+        /// Overwrite output files if they already exist
+        #[arg(long)]
+        overwrite: bool,
+    },
 }
+
 
 #[derive(Subcommand, Debug)]
 pub enum PresetAction {

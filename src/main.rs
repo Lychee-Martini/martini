@@ -604,8 +604,86 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 Ok(0)
             }
         }
+        Commands::Watch {
+            input,
+            output,
+            preset,
+            to,
+            settle_ms,
+            mut recursive,
+            initial,
+            mut delete_original,
+            mut move_originals,
+            overwrite,
+        } => {
+            let mut target_format_str = to;
+            if let Some(ref p_name) = preset {
+                let manager = martini::preset::PresetManager::load();
+                if let Some(p) = manager.get(p_name) {
+                    if target_format_str.is_none() {
+                        target_format_str = Some(p.to.clone());
+                    }
+                    if let Some(r) = p.recursive {
+                        recursive = r;
+                    }
+                    if let Some(d) = p.delete_original {
+                        delete_original = d;
+                    }
+                    if move_originals.is_none() && p.move_originals.is_some() {
+                        move_originals = p.move_originals.clone();
+                    }
+                } else {
+                    return Err(MartiniError::InvalidInputData {
+                        reason: format!("Preset '{}' not found", p_name),
+                    });
+                }
+            }
+
+            let format_override = if let Some(ref s) = target_format_str {
+                Some(Format::from_str(s).map_err(|e| MartiniError::InvalidInputData { reason: e })?)
+            } else {
+                None
+            };
+
+            let original_action = if let Some(dest) = move_originals {
+                martini::watcher::OriginalAction::MoveTo(dest)
+            } else if delete_original {
+                martini::watcher::OriginalAction::Delete
+            } else {
+                martini::watcher::OriginalAction::Keep
+            };
+
+            let rule = martini::watcher::WatchRule {
+                input_dir: input,
+                output_dir: output,
+                recursive,
+                settle_duration: std::time::Duration::from_millis(settle_ms),
+                original_action,
+                overwrite,
+                format_override,
+                initial_scan: initial,
+            };
+
+            let registry = std::sync::Arc::new(martini::converter::engine::EngineRegistry::default());
+            let watcher = martini::watcher::DirectoryWatcher::new(rule, registry);
+
+            let (_tx, rx) = std::sync::mpsc::channel();
+
+            if !args.quiet && !args.json {
+                println!(
+                    "👀 Martini watching inbox: {} -> {}",
+                    watcher.rule.input_dir.display(),
+                    watcher.rule.output_dir.display()
+                );
+                println!("Press Ctrl+C to stop.");
+            }
+
+            watcher.run(rx)?;
+            Ok(0)
+        }
     }
 }
+
 
 fn is_glob_pattern(path: &std::path::Path) -> bool {
     let s = path.to_string_lossy();

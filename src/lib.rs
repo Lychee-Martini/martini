@@ -2,6 +2,8 @@ pub mod cli;
 pub mod converter;
 pub mod error;
 pub mod preset;
+pub mod watcher;
+
 
 
 pub use converter::batch::{

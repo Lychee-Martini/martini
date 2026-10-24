@@ -60,6 +60,9 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1.0"
 tempfile = "3.27.0"
+# File watching
+notify = "8.0"
+
 
 
 
@@ -87,6 +90,13 @@ fontdb = "0.24"
 assert_cmd = "2.2.2"
 predicates = "3.1"
 tempfile = "3.27.0"
+
+[profile.dev]
+debug = 1
+
+[profile.test]
+debug = 1
+
 
 [profile.release]
 opt-level = 3
