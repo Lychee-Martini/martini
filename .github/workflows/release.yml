@@ -84,7 +84,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
   package-linux:
-    name: Package Linux (.deb & .rpm)
+    name: Package Linux (.deb & .rpm) & Installers
     needs: [create-release, upload-assets]
     runs-on: ubuntu-latest
     steps:
@@ -99,7 +99,7 @@ jobs:
       - name: Install Packaging Tools
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-deb,cargo-generate-rpm
+          tool: cargo-deb,cargo-generate-rpm,cargo-dist
 
       - name: Install musl-tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
@@ -124,12 +124,22 @@ jobs:
       - name: Build .rpm Package (YUM/DNF)
         run: cargo generate-rpm -o target/packages/
 
-      - name: Upload Linux Packages to Release
+      - name: Build Cross-Platform Installers (cargo-dist)
+        run: |
+          cargo dist build --artifacts=global
+          cp target/distrib/martini-cli-installer.sh target/packages/martini-installer.sh
+          cp target/distrib/martini-cli-installer.sh target/packages/martini-cli-installer.sh
+          cp target/distrib/martini-cli-installer.ps1 target/packages/martini-installer.ps1
+          cp target/distrib/martini-cli-installer.ps1 target/packages/martini-cli-installer.ps1
+
+      - name: Upload Linux Packages and Installers to Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             target/packages/*.deb
             target/packages/*.rpm
+            target/packages/*.sh
+            target/packages/*.ps1
 
   publish-release:
     name: Publish Release

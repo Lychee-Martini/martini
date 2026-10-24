@@ -28,23 +28,41 @@ A modern, extensible, and high-performance CLI format converter written in Rust.
 
 ## Installation
 
-### Homebrew (macOS & Linux)
+### ⚡ Quick Install (Recommended)
+
+Single-command standalone installation powered by `cargo-dist` (no dependencies required):
+
+#### macOS & Linux (Shell)
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Lychee-Martini/martini/releases/latest/download/martini-installer.sh | sh
+```
+
+#### Windows (PowerShell)
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Lychee-Martini/martini/releases/latest/download/martini-installer.ps1 | iex"
+```
+
+---
+
+### Package Managers
+
+#### Homebrew (macOS & Linux)
 ```bash
 brew install Lychee-Martini/tap/martini
 ```
 
-### Windows (WinGet)
+#### Windows (WinGet)
 ```powershell
 winget install LycheeMartini.Martini
 ```
 
-### Cargo (crates.io)
+#### Cargo (crates.io)
 ```bash
 cargo install martini-cli
 ```
 
-### Linux Packages (Debian / Ubuntu & Fedora / RHEL)
-Download the `.deb` (Debian/Ubuntu) or `.rpm` (Fedora/RHEL) package from [Releases](https://github.com/Lychee-Martini/martini/releases):
+#### Linux Packages (Debian / Ubuntu & Fedora / RHEL)
+Download `.deb` (Debian/Ubuntu) or `.rpm` (Fedora/RHEL) from [GitHub Releases](https://github.com/Lychee-Martini/martini/releases):
 ```bash
 # Debian / Ubuntu (APT)
 sudo apt install ./martini_*.deb
@@ -64,7 +82,7 @@ cargo install --path .
 cargo build --release
 ```
 
-For more details on package managers, see [Distribution Guide](docs/distribution.md).
+For more details on package managers and secrets, see [Distribution Guide](docs/distribution.md).
 
 ---
 
