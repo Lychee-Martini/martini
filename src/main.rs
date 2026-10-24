@@ -696,22 +696,14 @@ fn is_glob_pattern(path: &std::path::Path) -> bool {
 }
 
 fn get_glob_base(pattern: &str) -> std::path::PathBuf {
-    let mut base_str = String::new();
-    for char in pattern.chars() {
-        if char == '*' || char == '?' || char == '[' {
-            break;
-        }
-        base_str.push(char);
-    }
+    let base_str = pattern
+        .split_once(['*', '?', '['])
+        .map_or(pattern, |(b, _)| b);
     let base_path = std::path::PathBuf::from(base_str);
     if base_path.is_dir() {
         base_path
-    } else if let Some(parent) = base_path.parent() {
-        if parent.as_os_str().is_empty() {
-            std::path::PathBuf::from(".")
-        } else {
-            parent.to_path_buf()
-        }
+    } else if let Some(parent) = base_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        parent.to_path_buf()
     } else {
         std::path::PathBuf::from(".")
     }

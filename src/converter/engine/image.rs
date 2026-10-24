@@ -1,5 +1,5 @@
 use super::FormatEngine;
-use crate::converter::image_conv::ImageConverter;
+use crate::converter::image_conv::convert_image;
 use crate::converter::{ConvertOptions, Format, OutputFileMetadata};
 use crate::error::MartiniError;
 use std::fs;
@@ -11,6 +11,32 @@ pub struct ImageEngine;
 impl FormatEngine for ImageEngine {
     fn name(&self) -> &'static str {
         "image"
+    }
+
+    fn can_convert(&self, from: Format, to: Format) -> bool {
+        from != to
+            && matches!(
+                from,
+                Format::Svg
+                    | Format::Png
+                    | Format::Jpg
+                    | Format::Webp
+                    | Format::Avif
+                    | Format::Bmp
+                    | Format::Tiff
+                    | Format::Qoi
+            )
+            && matches!(
+                to,
+                Format::Png
+                    | Format::Jpg
+                    | Format::Webp
+                    | Format::Avif
+                    | Format::Favicon
+                    | Format::Bmp
+                    | Format::Tiff
+                    | Format::Qoi
+            )
     }
 
     fn supported_pairs(&self) -> Vec<(Format, Format)> {
@@ -60,8 +86,7 @@ impl FormatEngine for ImageEngine {
         opts.input_path = input.to_path_buf();
         opts.output_path = output.to_path_buf();
 
-        let converter = ImageConverter;
-        let res = converter.convert_image(from, to, &input_bytes, &opts)?;
+        let res = convert_image(from, to, &input_bytes, &opts)?;
 
         if let Some(first) = res.output_files.into_iter().next() {
             Ok(first)

@@ -8,6 +8,9 @@ impl FormatEngine for DummyEngine {
     fn name(&self) -> &'static str {
         "dummy"
     }
+    fn can_convert(&self, from: Format, to: Format) -> bool {
+        (from, to) == (Format::Json, Format::Yaml)
+    }
     fn supported_pairs(&self) -> Vec<(Format, Format)> {
         vec![(Format::Json, Format::Yaml)]
     }

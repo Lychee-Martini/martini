@@ -14,6 +14,18 @@ impl FormatEngine for DataEngine {
         "data"
     }
 
+    fn can_convert(&self, from: Format, to: Format) -> bool {
+        from != to
+            && matches!(
+                from,
+                Format::Json | Format::Yaml | Format::Toml | Format::Csv | Format::Tsv
+            )
+            && matches!(
+                to,
+                Format::Json | Format::Yaml | Format::Toml | Format::Csv | Format::Tsv
+            )
+    }
+
     fn supported_pairs(&self) -> Vec<(Format, Format)> {
         let formats = [
             Format::Json,

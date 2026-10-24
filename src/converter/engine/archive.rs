@@ -16,6 +16,12 @@ impl FormatEngine for ArchiveEngine {
         "archive"
     }
 
+    fn can_convert(&self, from: Format, to: Format) -> bool {
+        from != to
+            && matches!(from, Format::Zip | Format::Tar | Format::Gz)
+            && matches!(to, Format::Zip | Format::Tar | Format::Gz)
+    }
+
     fn supported_pairs(&self) -> Vec<(Format, Format)> {
         vec![
             (Format::Zip, Format::Tar),

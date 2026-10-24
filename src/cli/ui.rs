@@ -31,10 +31,12 @@ pub fn format_size(size_bytes: u64) -> String {
 }
 
 pub fn truncate_str(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("...{}", &s[s.len() - max_len + 3..])
+    if max_len <= 3 || s.chars().count() <= max_len {
+        return s.to_string();
+    }
+    match s.char_indices().nth_back(max_len - 4) {
+        Some((idx, _)) => format!("...{}", &s[idx..]),
+        None => s.to_string(),
     }
 }
 
@@ -47,22 +49,24 @@ pub fn print_setup_panel(
     delete_original: bool,
     overwrite: bool,
 ) {
-    println!("┌────────────────────────────────────────────────────────┐");
-    println!("│                Image Converter Setup                   │");
-    println!("├────────────────────────────────────────────────────────┤");
     println!(
-        "│ Target:            {:35} │",
-        truncate_str(&input.to_string_lossy(), 35)
+        "┌────────────────────────────────────────────────────────┐\n\
+         │                Image Converter Setup                   │\n\
+         ├────────────────────────────────────────────────────────┤\n\
+         │ Target:            {:<35} │\n\
+         │ Formats:           {:<35} │\n\
+         │ Quality:           {:<35} │\n\
+         │ Recursive:         {:<35} │\n\
+         │ Delete Original:   {:<35} │\n\
+         │ Overwrite Existing:{:<35} │\n\
+         └────────────────────────────────────────────────────────┘\n",
+        truncate_str(&input.to_string_lossy(), 35),
+        to,
+        format!("{} (lossless={})", quality, lossless),
+        recursive,
+        delete_original,
+        overwrite
     );
-    println!("│ Formats:           {:35} │", to);
-    println!(
-        "│ Quality:           {:35} │",
-        format!("{} (lossless={})", quality, lossless)
-    );
-    println!("│ Recursive:         {:35} │", recursive.to_string());
-    println!("│ Delete Original:   {:35} │", delete_original.to_string());
-    println!("│ Overwrite Existing:{:35} │", overwrite.to_string());
-    println!("└────────────────────────────────────────────────────────┘\n");
 }
 
 pub fn print_report_table(
@@ -152,5 +156,13 @@ mod tests {
     fn test_format_size() {
         assert_eq!(format_size(1024), "1 KB");
         assert_eq!(format_size(0), "0 B");
+    }
+
+    #[test]
+    fn test_truncate_str() {
+        assert_eq!(truncate_str("short", 10), "short");
+        assert_eq!(truncate_str("very_long_file_name", 10), "...le_name");
+        assert_eq!(truncate_str("这是中文字符串很长很长", 8), "...串很长很长");
+        assert_eq!(truncate_str("abc", 2), "abc");
     }
 }

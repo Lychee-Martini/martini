@@ -68,7 +68,6 @@ notify = "8.0"
 
 # Error handling and logs
 thiserror = "2.0.20"
-anyhow = "1.0.104"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 glob = "0.3"
@@ -89,7 +88,6 @@ fontdb = "0.24"
 [dev-dependencies]
 assert_cmd = "2.2.2"
 predicates = "3.1"
-tempfile = "3.27.0"
 
 [profile.dev]
 debug = 1

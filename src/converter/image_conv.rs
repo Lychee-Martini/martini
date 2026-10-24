@@ -6,356 +6,200 @@ use resvg::usvg;
 use std::fs;
 use std::io::Cursor;
 
-use crate::converter::{
-    ConversionResult, ConvertOptions, Converter, EncodedFile, Format, OutputFileMetadata,
-};
+use crate::converter::{ConversionResult, ConvertOptions, EncodedFile, Format, OutputFileMetadata};
 use crate::error::MartiniError;
 
-pub struct ImageConverter;
+pub fn convert_image(
+    from: Format,
+    to: Format,
+    input_data: &[u8],
+    options: &ConvertOptions,
+) -> Result<ConversionResult, MartiniError> {
+    // 1. Loading & Decoding Phase
+    let (tree, mut target_img) = if from == Format::Svg {
+        let opt = usvg::Options::default();
+        let svg_tree = usvg::Tree::from_data(input_data, &opt)?;
 
-impl ImageConverter {
-    pub fn convert_image(
-        &self,
-        from: Format,
-        to: Format,
-        input_data: &[u8],
-        options: &ConvertOptions,
-    ) -> Result<ConversionResult, MartiniError> {
-        // 1. Loading & Decoding Phase
-        let (tree, mut target_img) = if from == Format::Svg {
-            let opt = usvg::Options::default();
-            let svg_tree = usvg::Tree::from_data(input_data, &opt)?;
+        // If we're not converting to Favicon, render it at calculated size to target_img
+        if to != Format::Favicon {
+            let svg_w = svg_tree.size().width();
+            let svg_h = svg_tree.size().height();
 
-            // If we're not converting to Favicon, render it at calculated size to target_img
-            if to != Format::Favicon {
-                let svg_w = svg_tree.size().width();
-                let svg_h = svg_tree.size().height();
+            let (w, h) = calculate_dimensions(
+                svg_w.round() as u32,
+                svg_h.round() as u32,
+                options.width,
+                options.height,
+                options.no_upscale,
+            );
 
-                let (w, h) = calculate_dimensions(
-                    svg_w.round() as u32,
-                    svg_h.round() as u32,
-                    options.width,
-                    options.height,
-                    options.no_upscale,
-                );
+            let rgba = render_svg_to_rgba(&svg_tree, w, h)?;
+            let img_buffer = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(w, h, rgba)
+                .ok_or_else(|| {
+                MartiniError::Rendering("Failed to create ImageBuffer from SVG".to_string())
+            })?;
+            (Some(svg_tree), Some(DynamicImage::ImageRgba8(img_buffer)))
+        } else {
+            (Some(svg_tree), None)
+        }
+    } else {
+        let mut img = image::load_from_memory(input_data)?;
+        if to != Format::Favicon && (options.width.is_some() || options.height.is_some()) {
+            let (w, h) = calculate_dimensions(
+                img.width(),
+                img.height(),
+                options.width,
+                options.height,
+                options.no_upscale,
+            );
+            if (w, h) != (img.width(), img.height()) {
+                img = img.resize_exact(w, h, FilterType::Lanczos3);
+            }
+        }
+        (None, Some(img))
+    };
 
-                let rgba = render_svg_to_rgba(&svg_tree, w, h)?;
-                let img_buffer =
-                    image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(w, h, rgba)
-                        .ok_or_else(|| {
-                            MartiniError::Rendering(
-                                "Failed to create ImageBuffer from SVG".to_string(),
-                            )
-                        })?;
-                (Some(svg_tree), Some(DynamicImage::ImageRgba8(img_buffer)))
+    // 2. Perform color format standardisation for raster outputs if needed
+    if to != Format::Favicon
+        && let Some(ref img) = target_img
+    {
+        let color_type = img.color();
+        let converted = match color_type {
+            ColorType::La8 | ColorType::La16 | ColorType::Rgba8 | ColorType::Rgba16 => {
+                DynamicImage::ImageRgba8(img.to_rgba8())
+            }
+            _ => DynamicImage::ImageRgb8(img.to_rgb8()),
+        };
+        target_img = Some(converted);
+    }
+
+    // 3. Dispatch to specific format strategy
+    let encoded_files = encode_image(from, to, tree.as_ref(), target_img.as_ref(), options)?;
+
+    let mut output_files = Vec::new();
+    for file in encoded_files {
+        if let Some(parent) = file.path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&file.path, &file.bytes)?;
+        output_files.push(OutputFileMetadata {
+            path: file.path.to_string_lossy().to_string(),
+            size_bytes: file.bytes.len() as u64,
+            description: file.description,
+        });
+    }
+
+    Ok(ConversionResult {
+        from,
+        to,
+        output_files,
+    })
+}
+
+pub fn encode_image(
+    from: Format,
+    to: Format,
+    tree: Option<&usvg::Tree>,
+    img: Option<&DynamicImage>,
+    options: &ConvertOptions,
+) -> Result<Vec<EncodedFile>, MartiniError> {
+    match to {
+        Format::Webp => {
+            let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+                reason: "Failed to decode/render input image".to_string(),
+            })?;
+            let webp_encoder = webp::Encoder::from_image(target_img).map_err(|e| {
+                MartiniError::Rendering(format!("Failed to create WebP encoder: {}", e))
+            })?;
+            let webp_data = if options.lossless {
+                webp_encoder.encode_lossless()
             } else {
-                (Some(svg_tree), None)
-            }
-        } else {
-            let mut img = image::load_from_memory(input_data)?;
-            if to != Format::Favicon && (options.width.is_some() || options.height.is_some()) {
-                let (w, h) = calculate_dimensions(
-                    img.width(),
-                    img.height(),
-                    options.width,
-                    options.height,
-                    options.no_upscale,
-                );
-                if (w, h) != (img.width(), img.height()) {
-                    img = img.resize_exact(w, h, FilterType::Lanczos3);
-                }
-            }
-            (None, Some(img))
-        };
-
-        // 2. Perform color format standardisation for raster outputs if needed
-        if to != Format::Favicon
-            && let Some(ref img) = target_img
-        {
-            let color_type = img.color();
-            let converted = match color_type {
-                ColorType::La8 | ColorType::La16 | ColorType::Rgba8 | ColorType::Rgba16 => {
-                    DynamicImage::ImageRgba8(img.to_rgba8())
-                }
-                _ => DynamicImage::ImageRgb8(img.to_rgb8()),
+                webp_encoder.encode(options.quality as f32)
             };
-            target_img = Some(converted);
+            Ok(vec![EncodedFile {
+                path: options.output_path.clone(),
+                bytes: webp_data.to_vec(),
+                description: format!(
+                    "Converted image from {} to {} (quality: {}, lossless: {})",
+                    from, to, options.quality, options.lossless
+                ),
+            }])
         }
-
-        // 3. Dispatch to specific format strategy
-        let encoder: Box<dyn Encoder> = match to {
-            Format::Webp => Box::new(WebpEncoder),
-            Format::Avif => Box::new(AvifEncoder),
-            Format::Png => Box::new(PngEncoder),
-            Format::Jpg => Box::new(JpegEncoder),
-            Format::Favicon => Box::new(FaviconEncoder),
-            Format::Bmp => Box::new(BmpEncoder),
-            Format::Tiff => Box::new(TiffEncoder),
-            Format::Qoi => Box::new(QoiEncoder),
-            _ => {
-                return Err(MartiniError::UnsupportedConversion {
-                    from: from.to_string(),
-                    to: to.to_string(),
-                });
-            }
-        };
-
-        let encoded_files =
-            encoder.encode(from, to, tree.as_ref(), target_img.as_ref(), options)?;
-
-        let mut output_files = Vec::new();
-        for file in encoded_files {
-            if let Some(parent) = file.path.parent().filter(|p| !p.as_os_str().is_empty()) {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&file.path, &file.bytes)?;
-            output_files.push(OutputFileMetadata {
-                path: file.path.to_string_lossy().to_string(),
-                size_bytes: file.bytes.len() as u64,
-                description: file.description,
-            });
+        Format::Avif => {
+            let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+                reason: "Failed to decode/render input image".to_string(),
+            })?;
+            let avif_bytes = encode_avif(target_img, options.quality, options.lossless)?;
+            Ok(vec![EncodedFile {
+                path: options.output_path.clone(),
+                bytes: avif_bytes,
+                description: format!(
+                    "Converted image from {} to {} (quality: {}, lossless: {})",
+                    from, to, options.quality, options.lossless
+                ),
+            }])
         }
-
-        Ok(ConversionResult {
-            from,
-            to,
-            output_files,
-        })
+        Format::Png => encode_with_format(
+            img,
+            ImageFormat::Png,
+            format!(
+                "Converted image from {} to {} (quality: {}, lossless: {})",
+                from, to, options.quality, options.lossless
+            ),
+            options,
+        ),
+        Format::Jpg => encode_with_format(
+            img,
+            ImageFormat::Jpeg,
+            format!(
+                "Converted image from {} to {} (quality: {}, lossless: {})",
+                from, to, options.quality, options.lossless
+            ),
+            options,
+        ),
+        Format::Favicon => generate_favicon(tree, img, options),
+        Format::Bmp => encode_with_format(
+            img,
+            ImageFormat::Bmp,
+            format!("Converted image from {} to {}", from, to),
+            options,
+        ),
+        Format::Tiff => encode_with_format(
+            img,
+            ImageFormat::Tiff,
+            format!("Converted image from {} to {}", from, to),
+            options,
+        ),
+        Format::Qoi => encode_with_format(
+            img,
+            ImageFormat::Qoi,
+            format!("Converted image from {} to {}", from, to),
+            options,
+        ),
+        _ => Err(MartiniError::UnsupportedConversion {
+            from: from.to_string(),
+            to: to.to_string(),
+        }),
     }
 }
 
-// Converter implementation for backwards compatibility / generics
-impl Converter for ImageConverter {
-    fn convert(
-        &self,
-        input_data: &[u8],
-        options: &ConvertOptions,
-    ) -> Result<ConversionResult, MartiniError> {
-        // Fallback default conversion
-        self.convert_image(Format::Png, Format::Webp, input_data, options)
-    }
-}
-
-// --- Strategy Pattern for Image Format Encoders ---
-
-pub trait Encoder {
-    fn encode(
-        &self,
-        from: Format,
-        to: Format,
-        tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError>;
-}
-
-pub(crate) struct WebpEncoder;
-impl Encoder for WebpEncoder {
-    fn encode(
-        &self,
-        from: Format,
-        to: Format,
-        _tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError> {
-        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
-            reason: "Failed to decode/render input image".to_string(),
-        })?;
-
-        let webp_encoder = webp::Encoder::from_image(target_img).map_err(|e| {
-            MartiniError::Rendering(format!("Failed to create WebP encoder: {}", e))
-        })?;
-        let webp_data = if options.lossless {
-            webp_encoder.encode_lossless()
-        } else {
-            webp_encoder.encode(options.quality as f32)
-        };
-
-        let bytes = webp_data.to_vec();
-        let description = format!(
-            "Converted image from {} to {} (quality: {}, lossless: {})",
-            from, to, options.quality, options.lossless
-        );
-        Ok(vec![EncodedFile {
-            path: options.output_path.clone(),
-            bytes,
-            description,
-        }])
-    }
-}
-
-pub(crate) struct AvifEncoder;
-impl Encoder for AvifEncoder {
-    fn encode(
-        &self,
-        from: Format,
-        to: Format,
-        _tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError> {
-        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
-            reason: "Failed to decode/render input image".to_string(),
-        })?;
-
-        let avif_bytes = encode_avif(target_img, options.quality, options.lossless)?;
-        let description = format!(
-            "Converted image from {} to {} (quality: {}, lossless: {})",
-            from, to, options.quality, options.lossless
-        );
-        Ok(vec![EncodedFile {
-            path: options.output_path.clone(),
-            bytes: avif_bytes,
-            description,
-        }])
-    }
-}
-
-pub(crate) struct PngEncoder;
-impl Encoder for PngEncoder {
-    fn encode(
-        &self,
-        from: Format,
-        to: Format,
-        _tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError> {
-        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
-            reason: "Failed to decode/render input image".to_string(),
-        })?;
-
-        let mut png_bytes = Vec::new();
-        let mut cursor = Cursor::new(&mut png_bytes);
-        target_img.write_to(&mut cursor, ImageFormat::Png)?;
-
-        let description = format!(
-            "Converted image from {} to {} (quality: {}, lossless: {})",
-            from, to, options.quality, options.lossless
-        );
-        Ok(vec![EncodedFile {
-            path: options.output_path.clone(),
-            bytes: png_bytes,
-            description,
-        }])
-    }
-}
-
-pub(crate) struct JpegEncoder;
-impl Encoder for JpegEncoder {
-    fn encode(
-        &self,
-        from: Format,
-        to: Format,
-        _tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError> {
-        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
-            reason: "Failed to decode/render input image".to_string(),
-        })?;
-
-        let mut jpeg_bytes = Vec::new();
-        let mut cursor = Cursor::new(&mut jpeg_bytes);
-        target_img.write_to(&mut cursor, ImageFormat::Jpeg)?;
-
-        let description = format!(
-            "Converted image from {} to {} (quality: {}, lossless: {})",
-            from, to, options.quality, options.lossless
-        );
-        Ok(vec![EncodedFile {
-            path: options.output_path.clone(),
-            bytes: jpeg_bytes,
-            description,
-        }])
-    }
-}
-
-pub(crate) struct FaviconEncoder;
-impl Encoder for FaviconEncoder {
-    fn encode(
-        &self,
-        _from: Format,
-        _to: Format,
-        tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError> {
-        generate_favicon(tree, img, options)
-    }
-}
-
-pub(crate) struct BmpEncoder;
-impl Encoder for BmpEncoder {
-    fn encode(
-        &self,
-        from: Format,
-        to: Format,
-        _tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError> {
-        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
-            reason: "Failed to decode/render input image".to_string(),
-        })?;
-        let mut bytes = Vec::new();
-        let mut cursor = Cursor::new(&mut bytes);
-        target_img.write_to(&mut cursor, ImageFormat::Bmp)?;
-        Ok(vec![EncodedFile {
-            path: options.output_path.clone(),
-            bytes,
-            description: format!("Converted image from {} to {}", from, to),
-        }])
-    }
-}
-
-pub(crate) struct TiffEncoder;
-impl Encoder for TiffEncoder {
-    fn encode(
-        &self,
-        from: Format,
-        to: Format,
-        _tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError> {
-        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
-            reason: "Failed to decode/render input image".to_string(),
-        })?;
-        let mut bytes = Vec::new();
-        let mut cursor = Cursor::new(&mut bytes);
-        target_img.write_to(&mut cursor, ImageFormat::Tiff)?;
-        Ok(vec![EncodedFile {
-            path: options.output_path.clone(),
-            bytes,
-            description: format!("Converted image from {} to {}", from, to),
-        }])
-    }
-}
-
-pub(crate) struct QoiEncoder;
-impl Encoder for QoiEncoder {
-    fn encode(
-        &self,
-        from: Format,
-        to: Format,
-        _tree: Option<&usvg::Tree>,
-        img: Option<&DynamicImage>,
-        options: &ConvertOptions,
-    ) -> Result<Vec<EncodedFile>, MartiniError> {
-        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
-            reason: "Failed to decode/render input image".to_string(),
-        })?;
-        let mut bytes = Vec::new();
-        let mut cursor = Cursor::new(&mut bytes);
-        target_img.write_to(&mut cursor, ImageFormat::Qoi)?;
-        Ok(vec![EncodedFile {
-            path: options.output_path.clone(),
-            bytes,
-            description: format!("Converted image from {} to {}", from, to),
-        }])
-    }
+fn encode_with_format(
+    img: Option<&DynamicImage>,
+    format: ImageFormat,
+    desc: String,
+    options: &ConvertOptions,
+) -> Result<Vec<EncodedFile>, MartiniError> {
+    let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+        reason: "Failed to decode/render input image".to_string(),
+    })?;
+    let mut bytes = Vec::new();
+    let mut cursor = Cursor::new(&mut bytes);
+    target_img.write_to(&mut cursor, format)?;
+    Ok(vec![EncodedFile {
+        path: options.output_path.clone(),
+        bytes,
+        description: desc,
+    }])
 }
 
 fn encode_avif(img: &DynamicImage, quality: u8, lossless: bool) -> Result<Vec<u8>, MartiniError> {
