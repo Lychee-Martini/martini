@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 pub mod batch;
+pub mod engine;
 pub mod image_conv;
 pub mod md_conv;
 pub mod md_pdf;
@@ -17,7 +18,7 @@ pub struct EncodedFile {
     pub description: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Format {
     Svg,
@@ -29,6 +30,20 @@ pub enum Format {
     Pdf,
     Md,
     Docx,
+    // Data formats
+    Json,
+    Yaml,
+    Toml,
+    Csv,
+    Tsv,
+    // Archive formats
+    Zip,
+    Tar,
+    Gz,
+    // Extended Image formats
+    Bmp,
+    Tiff,
+    Qoi,
 }
 
 impl FromStr for Format {
@@ -37,7 +52,7 @@ impl FromStr for Format {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "svg" => Ok(Format::Svg),
-            "favicon" => Ok(Format::Favicon),
+            "favicon" | "ico" => Ok(Format::Favicon),
             "png" => Ok(Format::Png),
             "jpg" | "jpeg" => Ok(Format::Jpg),
             "webp" => Ok(Format::Webp),
@@ -45,6 +60,17 @@ impl FromStr for Format {
             "pdf" => Ok(Format::Pdf),
             "md" | "markdown" => Ok(Format::Md),
             "docx" => Ok(Format::Docx),
+            "json" => Ok(Format::Json),
+            "yaml" | "yml" => Ok(Format::Yaml),
+            "toml" => Ok(Format::Toml),
+            "csv" => Ok(Format::Csv),
+            "tsv" => Ok(Format::Tsv),
+            "zip" => Ok(Format::Zip),
+            "tar" => Ok(Format::Tar),
+            "gz" | "gzip" => Ok(Format::Gz),
+            "bmp" => Ok(Format::Bmp),
+            "tiff" | "tif" => Ok(Format::Tiff),
+            "qoi" => Ok(Format::Qoi),
             _ => Err(format!("Unsupported format: '{}'", s)),
         }
     }
@@ -62,9 +88,47 @@ impl std::fmt::Display for Format {
             Format::Pdf => write!(f, "pdf"),
             Format::Md => write!(f, "md"),
             Format::Docx => write!(f, "docx"),
+            Format::Json => write!(f, "json"),
+            Format::Yaml => write!(f, "yaml"),
+            Format::Toml => write!(f, "toml"),
+            Format::Csv => write!(f, "csv"),
+            Format::Tsv => write!(f, "tsv"),
+            Format::Zip => write!(f, "zip"),
+            Format::Tar => write!(f, "tar"),
+            Format::Gz => write!(f, "gz"),
+            Format::Bmp => write!(f, "bmp"),
+            Format::Tiff => write!(f, "tiff"),
+            Format::Qoi => write!(f, "qoi"),
         }
     }
 }
+
+impl Default for ConvertOptions {
+    fn default() -> Self {
+        Self {
+            input_path: PathBuf::new(),
+            output_path: PathBuf::new(),
+            package: false,
+            quality: 80,
+            lossless: false,
+            overwrite: false,
+            pages: None,
+            dpi: 150,
+            width: None,
+            height: None,
+            no_upscale: false,
+            theme: None,
+            paper_size: None,
+            margin: None,
+            font_family: None,
+            header: None,
+            footer: None,
+            no_page_numbers: false,
+            toc: false,
+        }
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct ConvertOptions {
