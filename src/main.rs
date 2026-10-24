@@ -38,7 +38,6 @@ where
         })
     });
 
-
     if !has_subcommand_or_root_help {
         let mut modified = args;
         modified.insert(1, std::ffi::OsString::from("convert"));
@@ -148,7 +147,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     } else {
                         println!("Available Presets:");
                         if presets.is_empty() {
-                            println!("  (No presets found. Create martini-presets.toml to add presets)");
+                            println!(
+                                "  (No presets found. Create martini-presets.toml to add presets)"
+                            );
                         } else {
                             for (name, preset) in presets {
                                 println!(
@@ -207,7 +208,9 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             if let Some(ref p_name) = preset {
                 let manager = martini::preset::PresetManager::load();
                 if let Some(p) = manager.get(p_name) {
-                    if from == "auto" && let Some(ref f) = p.from {
+                    if from == "auto"
+                        && let Some(ref f) = p.from
+                    {
                         from = f.clone();
                     }
                     if to.is_none() {
@@ -240,7 +243,6 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
 
             let input = input
                 .or(input_flag)
-
                 .expect("Input must be provided either as positional argument or via --input");
             let output = output.or(output_flag);
             let input_str = input.to_string_lossy();
@@ -640,7 +642,10 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             }
 
             let format_override = if let Some(ref s) = target_format_str {
-                Some(Format::from_str(s).map_err(|e| MartiniError::InvalidInputData { reason: e })?)
+                Some(
+                    Format::from_str(s)
+                        .map_err(|e| MartiniError::InvalidInputData { reason: e })?,
+                )
             } else {
                 None
             };
@@ -664,7 +669,8 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 initial_scan: initial,
             };
 
-            let registry = std::sync::Arc::new(martini::converter::engine::EngineRegistry::default());
+            let registry =
+                std::sync::Arc::new(martini::converter::engine::EngineRegistry::default());
             let watcher = martini::watcher::DirectoryWatcher::new(rule, registry);
 
             let (_tx, rx) = std::sync::mpsc::channel();
@@ -683,7 +689,6 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
         }
     }
 }
-
 
 fn is_glob_pattern(path: &std::path::Path) -> bool {
     let s = path.to_string_lossy();

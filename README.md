@@ -5,10 +5,14 @@ A modern, extensible, and high-performance CLI format converter written in Rust.
 ## Features
 
 - 🎨 **Pure Rust SVG rendering engine**: Powered by `resvg` and `tiny-skia`. Self-contained and fully portable across Windows, macOS, and Linux without native system dependencies (like Cairo or Glib).
-- 🖼️ **Unified Image Conversion**: Supports converting between SVG, PNG, JPG/JPEG, WebP, and AVIF in any combination.
+- 🖼️ **Unified Image Conversion**: Supports converting between SVG, PNG, JPG/JPEG, WebP, AVIF, BMP, TIFF, and QOI in any combination.
 - 📦 **Favicon generation from any source**: Converts **both** SVG vector files (rendered dynamically at multiple resolutions) and standard raster images (downscaled using Lanczos3 filtering) to a favicon:
   - **Default**: Generates a standard multi-resolution `favicon.ico` containing `16x16`, `32x32`, and `48x48` dimensions.
   - **Package Mode (`--package`)**: Generates a comprehensive modern suite of assets including `favicon.ico`, PNGs (16x16, 32x32, 180x180, 192x192, 512x512), `site.webmanifest`, and copy-pasteable HTML header tags.
+- 📊 **Structured Data Formats Transcoding**: Fast, pure-Rust bidirectional conversion between JSON, YAML, TOML, and tabular CSV / TSV formats with automatic column schema union.
+- 🗜️ **Archive Compression & Extraction**: Convert between ZIP, TAR, and TAR.GZ directly without external tools; extract archives into folders or compress directories into archive formats with path traversal sanitization.
+- ⚙️ **Conversion Presets System**: Store and reuse conversion preferences in `martini-presets.toml` or user global configuration. Inspect available presets with `martini preset list` and `martini preset show <name>`.
+- 👁️ **Directory Watching Daemon (`martini watch`)**: Automated headless inbox/outbox file monitoring daemon with settle debouncing, anti-loop output protection, backlog initial scanning, and customizable original file lifecycle (`keep`, `delete`, `move_originals`).
 - 🏎️ **Concurrently Optimized Batch Processing**: Process a single file or a whole directory concurrently using a `rayon` thread pool. Includes customizable worker threads and directory recursion (`-r`).
 - 📝 **Markdown to PDF & Word (DOCX)**:
   - **Pure Rust Markdown to PDF**: Powered by an embedded `typst` typesetting engine with zero external dependencies. Supports auto-detection of CJK system fonts (Microsoft YaHei, PingFang SC, Noto Sans CJK), customizable themes (`github`, `academic`, `modern`, `minimal`), paper sizes (A4, Letter, A3, A5), margins, headers/footers, page numbers, automatic table of contents (`--toc`), syntax-highlighted code blocks, GFM tables, and LaTeX math formulas.
@@ -213,6 +217,99 @@ LaTeX math equations (enclosed in `$` for inline math or `$$` for display math) 
 
 ```markdown
 $$DCF = \sum_{t=1}^{n} \frac{FCF_t}{(1+WACC)^t} + \frac{FCF_n \times (1+g)}{(WACC - g) \times (1+WACC)^n}$$
+```
+
+### 8. Transcode Structured Data (JSON / YAML / TOML / CSV / TSV)
+
+Convert between popular configuration and tabular data formats with automatic schema inference and column union:
+
+```bash
+# Convert JSON to YAML
+martini convert -i config.json -o config.yaml
+
+# Convert TOML configuration to JSON
+martini convert -i settings.toml -o settings.json
+
+# Convert JSON array of objects to CSV or TSV
+martini convert -i records.json -o records.csv
+
+# Convert CSV to TSV or JSON
+martini convert -i data.csv -o data.json
+```
+
+### 9. Archive Transcoding & Extraction (ZIP / TAR / TAR.GZ)
+
+Transcode between archive formats without intermediate disk clutter, or extract with path traversal sanitization:
+
+```bash
+# Transcode ZIP directly to compressed TAR.GZ
+martini convert -i bundle.zip -o bundle.tar.gz
+
+# Extract ZIP or TAR archive to a directory
+martini convert -i release.zip -o ./dist
+
+# Compress a directory into a ZIP or TAR archive
+martini convert -i ./dist -o release.zip
+```
+
+### 10. Extended Image Formats (BMP, TIFF, QOI)
+
+Full support for legacy and modern lightweight raster image formats:
+
+```bash
+# Convert PNG to Quite OK Image format (.qoi)
+martini convert -i asset.png -o asset.qoi
+
+# Convert TIFF or BMP image to WebP
+martini convert -i scan.tiff -o scan.webp
+```
+
+### 11. Presets Management (`martini preset`)
+
+Manage reusable conversion presets across personal workflows and team projects:
+
+```bash
+# List all active presets (from user config and ./martini-presets.toml)
+martini preset list
+
+# Inspect configuration of a specific preset
+martini preset show web-optimize
+
+# Apply a preset during conversion
+martini convert -i banner.png --preset web-optimize
+```
+
+Example `martini-presets.toml`:
+
+```toml
+[presets.web-optimize]
+to = "webp"
+quality = 82
+lossless = false
+
+[presets.doc-pdf]
+to = "pdf"
+theme = "academic"
+paper_size = "a4"
+toc = true
+```
+
+### 12. Automated Directory Watching (`martini watch`)
+
+Run Martini as a headless background daemon to monitor incoming files and auto-convert them to an outbox directory:
+
+```bash
+# Watch inbox directory and automatically convert incoming JSON files to YAML
+martini watch -i ./inbox -o ./outbox --to yaml
+
+# Watch with custom settle debounce (e.g. 500ms) and initial backlog scanning
+martini watch -i ./inbox -o ./outbox --preset web-optimize --settle-ms 500 --initial
+
+# Automatically delete source files after conversion
+martini watch -i ./inbox -o ./outbox --to webp --delete-original
+
+# Or move source files to an archive folder after successful processing
+martini watch -i ./inbox -o ./outbox --to webp --move-originals ./processed
 ```
 
 ---

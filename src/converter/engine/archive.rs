@@ -1,9 +1,9 @@
 use super::FormatEngine;
 use crate::converter::{ConvertOptions, Format, OutputFileMetadata};
 use crate::error::MartiniError;
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -40,9 +40,7 @@ impl FormatEngine for ArchiveEngine {
         extract_archive(input, temp_dir.path(), from)?;
 
         if let Some(parent) = output.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).map_err(MartiniError::Io)?;
-            }
+            fs::create_dir_all(parent).map_err(MartiniError::Io)?;
         }
 
         create_archive(temp_dir.path(), output, to)?;
@@ -72,19 +70,26 @@ pub fn detect_archive_format(path: &Path) -> Format {
     }
 }
 
-fn extract_archive(archive_path: &Path, dest_dir: &Path, format: Format) -> Result<(), MartiniError> {
+fn extract_archive(
+    archive_path: &Path,
+    dest_dir: &Path,
+    format: Format,
+) -> Result<(), MartiniError> {
     let file = fs::File::open(archive_path).map_err(MartiniError::Io)?;
 
     match format {
         Format::Zip => {
-            let mut zip = zip::ZipArchive::new(file).map_err(|e| MartiniError::InvalidInputData {
-                reason: format!("Failed to read ZIP archive: {}", e),
-            })?;
+            let mut zip =
+                zip::ZipArchive::new(file).map_err(|e| MartiniError::InvalidInputData {
+                    reason: format!("Failed to read ZIP archive: {}", e),
+                })?;
 
             for i in 0..zip.len() {
-                let mut entry = zip.by_index(i).map_err(|e| MartiniError::InvalidInputData {
-                    reason: format!("Failed to read ZIP entry: {}", e),
-                })?;
+                let mut entry = zip
+                    .by_index(i)
+                    .map_err(|e| MartiniError::InvalidInputData {
+                        reason: format!("Failed to read ZIP entry: {}", e),
+                    })?;
 
                 let enclosed = match entry.enclosed_name() {
                     Some(path) => path.to_owned(),
@@ -96,9 +101,7 @@ fn extract_archive(archive_path: &Path, dest_dir: &Path, format: Format) -> Resu
                     fs::create_dir_all(&out_path).map_err(MartiniError::Io)?;
                 } else {
                     if let Some(p) = out_path.parent() {
-                        if !p.exists() {
-                            fs::create_dir_all(p).map_err(MartiniError::Io)?;
-                        }
+                        fs::create_dir_all(p).map_err(MartiniError::Io)?;
                     }
                     let mut outfile = fs::File::create(&out_path).map_err(MartiniError::Io)?;
                     io::copy(&mut entry, &mut outfile).map_err(MartiniError::Io)?;
@@ -107,16 +110,18 @@ fn extract_archive(archive_path: &Path, dest_dir: &Path, format: Format) -> Resu
         }
         Format::Tar => {
             let mut tar = tar::Archive::new(file);
-            tar.unpack(dest_dir).map_err(|e| MartiniError::InvalidInputData {
-                reason: format!("Failed to unpack TAR archive: {}", e),
-            })?;
+            tar.unpack(dest_dir)
+                .map_err(|e| MartiniError::InvalidInputData {
+                    reason: format!("Failed to unpack TAR archive: {}", e),
+                })?;
         }
         Format::Gz => {
             let gz = GzDecoder::new(file);
             let mut tar = tar::Archive::new(gz);
-            tar.unpack(dest_dir).map_err(|e| MartiniError::InvalidInputData {
-                reason: format!("Failed to unpack TAR.GZ archive: {}", e),
-            })?;
+            tar.unpack(dest_dir)
+                .map_err(|e| MartiniError::InvalidInputData {
+                    reason: format!("Failed to unpack TAR.GZ archive: {}", e),
+                })?;
         }
         _ => {
             return Err(MartiniError::UnsupportedConversion {
@@ -142,9 +147,10 @@ fn create_archive(src_dir: &Path, out_file: &Path, format: Format) -> Result<(),
 
             for (rel_path, abs_path) in files {
                 let rel_str = rel_path.to_string_lossy().replace('\\', "/");
-                zip.start_file(rel_str, options).map_err(|e| MartiniError::OutputWrite {
-                    reason: format!("Failed to write ZIP entry header: {}", e),
-                })?;
+                zip.start_file(rel_str, options)
+                    .map_err(|e| MartiniError::OutputWrite {
+                        reason: format!("Failed to write ZIP entry header: {}", e),
+                    })?;
                 let mut f = fs::File::open(&abs_path).map_err(MartiniError::Io)?;
                 let mut buf = Vec::new();
                 f.read_to_end(&mut buf).map_err(MartiniError::Io)?;
@@ -158,9 +164,10 @@ fn create_archive(src_dir: &Path, out_file: &Path, format: Format) -> Result<(),
         Format::Tar => {
             let file = fs::File::create(out_file).map_err(MartiniError::Io)?;
             let mut tar = tar::Builder::new(file);
-            tar.append_dir_all(".", src_dir).map_err(|e| MartiniError::OutputWrite {
-                reason: format!("Failed to write TAR archive: {}", e),
-            })?;
+            tar.append_dir_all(".", src_dir)
+                .map_err(|e| MartiniError::OutputWrite {
+                    reason: format!("Failed to write TAR archive: {}", e),
+                })?;
             tar.finish().map_err(|e| MartiniError::OutputWrite {
                 reason: format!("Failed to finalize TAR: {}", e),
             })?;
@@ -169,9 +176,10 @@ fn create_archive(src_dir: &Path, out_file: &Path, format: Format) -> Result<(),
             let file = fs::File::create(out_file).map_err(MartiniError::Io)?;
             let gz = GzEncoder::new(file, Compression::default());
             let mut tar = tar::Builder::new(gz);
-            tar.append_dir_all(".", src_dir).map_err(|e| MartiniError::OutputWrite {
-                reason: format!("Failed to write TAR.GZ archive: {}", e),
-            })?;
+            tar.append_dir_all(".", src_dir)
+                .map_err(|e| MartiniError::OutputWrite {
+                    reason: format!("Failed to write TAR.GZ archive: {}", e),
+                })?;
             tar.finish().map_err(|e| MartiniError::OutputWrite {
                 reason: format!("Failed to finalize TAR.GZ: {}", e),
             })?;
@@ -187,16 +195,19 @@ fn create_archive(src_dir: &Path, out_file: &Path, format: Format) -> Result<(),
     Ok(())
 }
 
-fn collect_files(base_dir: &Path, current_dir: &Path, files: &mut Vec<(PathBuf, PathBuf)>) -> Result<(), MartiniError> {
+fn collect_files(
+    base_dir: &Path,
+    current_dir: &Path,
+    files: &mut Vec<(PathBuf, PathBuf)>,
+) -> Result<(), MartiniError> {
     if let Ok(entries) = fs::read_dir(current_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
                 collect_files(base_dir, &path, files)?;
             } else if path.is_file() {
-                if let Ok(rel) = path.strip_prefix(base_dir) {
-                    files.push((rel.to_path_buf(), path));
-                }
+                let rel = path.strip_prefix(base_dir).unwrap_or(&path);
+                files.push((rel.to_path_buf(), path));
             }
         }
     }

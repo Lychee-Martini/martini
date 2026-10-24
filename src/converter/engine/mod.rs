@@ -8,9 +8,6 @@ pub mod image;
 pub mod registry;
 pub use registry::EngineRegistry;
 
-
-
-
 /// A format conversion engine capable of handling specific (from, to) format pairs.
 pub trait FormatEngine: Send + Sync {
     /// Unique identifier for this engine (e.g. "image", "document", "data", "archive")

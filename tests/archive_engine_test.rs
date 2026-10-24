@@ -1,6 +1,6 @@
-use martini::converter::engine::archive::ArchiveEngine;
-use martini::converter::engine::FormatEngine;
 use martini::converter::ConvertOptions;
+use martini::converter::engine::FormatEngine;
+use martini::converter::engine::archive::ArchiveEngine;
 use std::fs;
 use std::io::Read;
 use tempfile::tempdir;
@@ -47,8 +47,8 @@ fn test_zip_to_targz_conversion() {
     {
         let file = fs::File::create(&zip_file).unwrap();
         let mut zip = zip::ZipWriter::new(file);
-        let options =
-            zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
         zip.start_file("sample.txt", options).unwrap();
         use std::io::Write;
         zip.write_all(b"sample content").unwrap();

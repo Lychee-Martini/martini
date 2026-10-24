@@ -25,9 +25,7 @@ fn test_watcher_settle_and_convert() {
     let watcher = DirectoryWatcher::new(rule, registry);
     let (tx, rx) = std::sync::mpsc::channel();
 
-    let handle = std::thread::spawn(move || {
-        watcher.run_with_timeout(rx, Duration::from_secs(3))
-    });
+    let handle = std::thread::spawn(move || watcher.run_with_timeout(rx, Duration::from_secs(3)));
 
     // Let the watcher start listening
     std::thread::sleep(Duration::from_millis(100));
@@ -72,9 +70,7 @@ fn test_watcher_initial_scan() {
     let watcher = DirectoryWatcher::new(rule, registry);
     let (tx, rx) = std::sync::mpsc::channel();
 
-    let handle = std::thread::spawn(move || {
-        watcher.run_with_timeout(rx, Duration::from_secs(2))
-    });
+    let handle = std::thread::spawn(move || watcher.run_with_timeout(rx, Duration::from_secs(2)));
 
     std::thread::sleep(Duration::from_millis(400));
     let _ = tx.send(());
@@ -82,5 +78,8 @@ fn test_watcher_initial_scan() {
     assert!(res.is_ok());
 
     let output_yaml = outbox.path().join("existing.yaml");
-    assert!(output_yaml.exists(), "Existing file must be converted with initial_scan");
+    assert!(
+        output_yaml.exists(),
+        "Existing file must be converted with initial_scan"
+    );
 }

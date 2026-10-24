@@ -100,7 +100,6 @@ impl ImageConverter {
             }
         };
 
-
         let encoded_files =
             encoder.encode(from, to, tree.as_ref(), target_img.as_ref(), options)?;
 
@@ -358,7 +357,6 @@ impl Encoder for QoiEncoder {
         }])
     }
 }
-
 
 fn encode_avif(img: &DynamicImage, quality: u8, lossless: bool) -> Result<Vec<u8>, MartiniError> {
     let rgba_img = img.to_rgba8();

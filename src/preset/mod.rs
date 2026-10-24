@@ -45,10 +45,8 @@ impl PresetManager {
     pub fn load() -> Self {
         let mut manager = Self::empty();
         // 1. User config directory: %APPDATA%/martini/presets.toml or ~/.config/martini/presets.toml
-        if let Some(user_config) = get_user_config_path() {
-            if user_config.exists() {
-                let _ = manager.merge_from_path(&user_config);
-            }
+        if let Some(user_config) = get_user_config_path().filter(|p| p.exists()) {
+            let _ = manager.merge_from_path(&user_config);
         }
         // 2. Project local: ./martini-presets.toml
         let local_path = Path::new("martini-presets.toml");
@@ -66,11 +64,14 @@ impl PresetManager {
 
     pub fn merge_from_path(&mut self, path: &Path) -> Result<(), MartiniError> {
         let content = fs::read_to_string(path).map_err(MartiniError::Io)?;
-        let file: PresetConfigFile = toml::from_str(&content).map_err(|e| {
-            MartiniError::InvalidInputData {
-                reason: format!("Failed to parse presets file at '{}': {}", path.display(), e),
-            }
-        })?;
+        let file: PresetConfigFile =
+            toml::from_str(&content).map_err(|e| MartiniError::InvalidInputData {
+                reason: format!(
+                    "Failed to parse presets file at '{}': {}",
+                    path.display(),
+                    e
+                ),
+            })?;
         for (name, preset) in file.presets {
             self.presets.insert(name, preset);
         }

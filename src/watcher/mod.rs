@@ -8,8 +8,8 @@ use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
+use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,7 +35,6 @@ pub struct DirectoryWatcher {
     pub rule: WatchRule,
     registry: Arc<EngineRegistry>,
 }
-
 
 impl DirectoryWatcher {
     pub fn new(rule: WatchRule, registry: Arc<EngineRegistry>) -> Self {
@@ -122,30 +121,22 @@ impl DirectoryWatcher {
             }
 
             // Check overall timeout
-            if let Some(t) = timeout {
-                if start_time.elapsed() >= t && queue.is_empty() {
-                    break;
-                }
+            if timeout.is_some_and(|t| start_time.elapsed() >= t && queue.is_empty()) {
+                break;
             }
 
             // Poll file events with timeout
-            if let Ok(res) = notify_rx.recv_timeout(Duration::from_millis(50)) {
-                if let Ok(event) = res {
-                    if matches!(
-                        event.kind,
-                        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Any
-                    ) {
-                        for path in event.paths {
-                            if path.is_file()
-                                && !is_excluded(
-                                    &path,
-                                    &canonical_output,
-                                    &self.rule.original_action,
-                                )
-                            {
-                                queue.insert_or_update(path);
-                            }
-                        }
+            if let Ok(Ok(event)) = notify_rx.recv_timeout(Duration::from_millis(50))
+                && matches!(
+                    event.kind,
+                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Any
+                )
+            {
+                for path in event.paths {
+                    if path.is_file()
+                        && !is_excluded(&path, &canonical_output, &self.rule.original_action)
+                    {
+                        queue.insert_or_update(path);
                     }
                 }
             }
@@ -199,10 +190,12 @@ impl DirectoryWatcher {
             return Ok(());
         }
 
-        let mut opt = ConvertOptions::default();
-        opt.input_path = input_path.to_path_buf();
-        opt.output_path = out_file.clone();
-        opt.overwrite = self.rule.overwrite;
+        let opt = ConvertOptions {
+            input_path: input_path.to_path_buf(),
+            output_path: out_file.clone(),
+            overwrite: self.rule.overwrite,
+            ..Default::default()
+        };
 
         engine.convert(input_path, &out_file, &opt)?;
 
@@ -231,9 +224,7 @@ fn is_excluded(path: &Path, canonical_output: &Path, action: &OriginalAction) ->
         return true;
     }
     if let OriginalAction::MoveTo(move_dir) = action {
-        let canonical_move = move_dir
-            .canonicalize()
-            .unwrap_or_else(|_| move_dir.clone());
+        let canonical_move = move_dir.canonicalize().unwrap_or_else(|_| move_dir.clone());
         if canonical.starts_with(canonical_move) {
             return true;
         }

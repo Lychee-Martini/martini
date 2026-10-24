@@ -205,7 +205,6 @@ pub enum Commands {
     },
 }
 
-
 #[derive(Subcommand, Debug)]
 pub enum PresetAction {
     /// List all available presets
@@ -216,4 +215,3 @@ pub enum PresetAction {
         name: String,
     },
 }
-

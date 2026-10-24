@@ -134,25 +134,21 @@ fn read_data(path: &Path, format: Format) -> Result<Value, MartiniError> {
 
 fn write_data(value: &Value, path: &Path, format: Format) -> Result<(), MartiniError> {
     if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).map_err(MartiniError::Io)?;
-        }
+        fs::create_dir_all(parent).map_err(MartiniError::Io)?;
     }
 
     match format {
         Format::Json => {
-            let json_str = serde_json::to_string_pretty(value).map_err(|e| {
-                MartiniError::OutputWrite {
+            let json_str =
+                serde_json::to_string_pretty(value).map_err(|e| MartiniError::OutputWrite {
                     reason: format!("Failed to serialize JSON: {}", e),
-                }
-            })?;
+                })?;
             fs::write(path, json_str).map_err(MartiniError::Io)?;
         }
         Format::Yaml => {
-            let yaml_str =
-                serde_yaml::to_string(value).map_err(|e| MartiniError::OutputWrite {
-                    reason: format!("Failed to serialize YAML: {}", e),
-                })?;
+            let yaml_str = serde_yaml::to_string(value).map_err(|e| MartiniError::OutputWrite {
+                reason: format!("Failed to serialize YAML: {}", e),
+            })?;
             fs::write(path, yaml_str).map_err(MartiniError::Io)?;
         }
         Format::Toml => {
@@ -200,29 +196,26 @@ fn write_data(value: &Value, path: &Path, format: Format) -> Result<(), MartiniE
                     }
 
                     if all_keys.is_empty() {
-                        wtr.write_record(["value"]).map_err(|e| {
-                            MartiniError::OutputWrite {
+                        wtr.write_record(["value"])
+                            .map_err(|e| MartiniError::OutputWrite {
                                 reason: format!("Failed to write CSV header: {}", e),
-                            }
-                        })?;
+                            })?;
                         for item in items {
                             let str_val = match item {
                                 Value::String(s) => s.clone(),
                                 other => other.to_string(),
                             };
-                            wtr.write_record([str_val]).map_err(|e| {
-                                MartiniError::OutputWrite {
+                            wtr.write_record([str_val])
+                                .map_err(|e| MartiniError::OutputWrite {
                                     reason: format!("Failed to write CSV record: {}", e),
-                                }
-                            })?;
+                                })?;
                         }
                     } else {
                         let headers: Vec<&str> = all_keys.iter().map(|s| s.as_str()).collect();
-                        wtr.write_record(&headers).map_err(|e| {
-                            MartiniError::OutputWrite {
+                        wtr.write_record(&headers)
+                            .map_err(|e| MartiniError::OutputWrite {
                                 reason: format!("Failed to write CSV header: {}", e),
-                            }
-                        })?;
+                            })?;
 
                         for item in items {
                             let mut row = Vec::new();
@@ -236,20 +229,18 @@ fn write_data(value: &Value, path: &Path, format: Format) -> Result<(), MartiniE
                                     row.push(field_val);
                                 }
                             }
-                            wtr.write_record(&row).map_err(|e| {
-                                MartiniError::OutputWrite {
+                            wtr.write_record(&row)
+                                .map_err(|e| MartiniError::OutputWrite {
                                     reason: format!("Failed to write CSV record: {}", e),
-                                }
-                            })?;
+                                })?;
                         }
                     }
                 }
                 Value::Object(map) => {
-                    wtr.write_record(["key", "value"]).map_err(|e| {
-                        MartiniError::OutputWrite {
+                    wtr.write_record(["key", "value"])
+                        .map_err(|e| MartiniError::OutputWrite {
                             reason: format!("Failed to write CSV header: {}", e),
-                        }
-                    })?;
+                        })?;
                     for (k, v) in map {
                         let str_val = match v {
                             Value::String(s) => s.clone(),
@@ -262,11 +253,10 @@ fn write_data(value: &Value, path: &Path, format: Format) -> Result<(), MartiniE
                     }
                 }
                 _ => {
-                    wtr.write_record(["value"]).map_err(|e| {
-                        MartiniError::OutputWrite {
+                    wtr.write_record(["value"])
+                        .map_err(|e| MartiniError::OutputWrite {
                             reason: format!("Failed to write CSV header: {}", e),
-                        }
-                    })?;
+                        })?;
                     wtr.write_record([value.to_string()]).map_err(|e| {
                         MartiniError::OutputWrite {
                             reason: format!("Failed to write CSV record: {}", e),

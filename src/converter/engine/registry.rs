@@ -16,9 +16,6 @@ impl Default for EngineRegistry {
     }
 }
 
-
-
-
 impl EngineRegistry {
     pub fn empty() -> Self {
         Self {

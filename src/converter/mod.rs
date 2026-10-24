@@ -129,7 +129,6 @@ impl Default for ConvertOptions {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct ConvertOptions {
     pub input_path: PathBuf,
