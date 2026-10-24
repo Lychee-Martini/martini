@@ -2,9 +2,11 @@ use crate::converter::{ConvertOptions, Format, OutputFileMetadata};
 use crate::error::MartiniError;
 use std::path::Path;
 
+pub mod archive;
 pub mod data;
 pub mod registry;
 pub use registry::EngineRegistry;
+
 
 
 /// A format conversion engine capable of handling specific (from, to) format pairs.
