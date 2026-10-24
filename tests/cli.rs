@@ -825,3 +825,11 @@ fn test_positional_and_flag_output_conflict() {
         .failure()
         .stderr(predicate::str::contains("cannot be used with"));
 }
+
+#[test]
+fn test_no_args_exits_zero() {
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: martini"));
+}

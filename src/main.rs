@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::process;
 use std::str::FromStr;
@@ -40,7 +40,15 @@ where
 }
 
 fn main() {
-    let args = CliArgs::parse_from(normalize_args(std::env::args_os()));
+    let raw_args: Vec<_> = std::env::args_os().collect();
+    if raw_args.len() <= 1 {
+        let mut cmd = CliArgs::command();
+        let _ = cmd.print_help();
+        println!();
+        process::exit(0);
+    }
+
+    let args = CliArgs::parse_from(normalize_args(raw_args));
     let is_json = args.json;
 
     // 1. Initialize logging
