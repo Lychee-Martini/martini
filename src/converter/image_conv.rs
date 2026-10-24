@@ -89,6 +89,9 @@ impl ImageConverter {
             Format::Png => Box::new(PngEncoder),
             Format::Jpg => Box::new(JpegEncoder),
             Format::Favicon => Box::new(FaviconEncoder),
+            Format::Bmp => Box::new(BmpEncoder),
+            Format::Tiff => Box::new(TiffEncoder),
+            Format::Qoi => Box::new(QoiEncoder),
             _ => {
                 return Err(MartiniError::UnsupportedConversion {
                     from: from.to_string(),
@@ -96,6 +99,7 @@ impl ImageConverter {
                 });
             }
         };
+
 
         let encoded_files =
             encoder.encode(from, to, tree.as_ref(), target_img.as_ref(), options)?;
@@ -282,6 +286,79 @@ impl Encoder for FaviconEncoder {
         generate_favicon(tree, img, options)
     }
 }
+
+pub(crate) struct BmpEncoder;
+impl Encoder for BmpEncoder {
+    fn encode(
+        &self,
+        from: Format,
+        to: Format,
+        _tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<Vec<EncodedFile>, MartiniError> {
+        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Failed to decode/render input image".to_string(),
+        })?;
+        let mut bytes = Vec::new();
+        let mut cursor = Cursor::new(&mut bytes);
+        target_img.write_to(&mut cursor, ImageFormat::Bmp)?;
+        Ok(vec![EncodedFile {
+            path: options.output_path.clone(),
+            bytes,
+            description: format!("Converted image from {} to {}", from, to),
+        }])
+    }
+}
+
+pub(crate) struct TiffEncoder;
+impl Encoder for TiffEncoder {
+    fn encode(
+        &self,
+        from: Format,
+        to: Format,
+        _tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<Vec<EncodedFile>, MartiniError> {
+        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Failed to decode/render input image".to_string(),
+        })?;
+        let mut bytes = Vec::new();
+        let mut cursor = Cursor::new(&mut bytes);
+        target_img.write_to(&mut cursor, ImageFormat::Tiff)?;
+        Ok(vec![EncodedFile {
+            path: options.output_path.clone(),
+            bytes,
+            description: format!("Converted image from {} to {}", from, to),
+        }])
+    }
+}
+
+pub(crate) struct QoiEncoder;
+impl Encoder for QoiEncoder {
+    fn encode(
+        &self,
+        from: Format,
+        to: Format,
+        _tree: Option<&usvg::Tree>,
+        img: Option<&DynamicImage>,
+        options: &ConvertOptions,
+    ) -> Result<Vec<EncodedFile>, MartiniError> {
+        let target_img = img.ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Failed to decode/render input image".to_string(),
+        })?;
+        let mut bytes = Vec::new();
+        let mut cursor = Cursor::new(&mut bytes);
+        target_img.write_to(&mut cursor, ImageFormat::Qoi)?;
+        Ok(vec![EncodedFile {
+            path: options.output_path.clone(),
+            bytes,
+            description: format!("Converted image from {} to {}", from, to),
+        }])
+    }
+}
+
 
 fn encode_avif(img: &DynamicImage, quality: u8, lossless: bool) -> Result<Vec<u8>, MartiniError> {
     let rgba_img = img.to_rgba8();

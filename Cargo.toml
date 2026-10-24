@@ -32,7 +32,11 @@ image = { version = "0.25.10", default-features = false, features = [
     "png",
     "jpeg",
     "webp",
+    "bmp",
+    "tiff",
+    "qoi",
 ] }
+
 ico = "0.5.0"
 ravif = { version = "0.13.0", default-features = false }
 webp = "0.3.1"

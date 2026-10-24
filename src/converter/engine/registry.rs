@@ -9,11 +9,13 @@ pub struct EngineRegistry {
 impl Default for EngineRegistry {
     fn default() -> Self {
         let mut registry = Self::empty();
+        registry.register(Box::new(super::image::ImageEngine));
         registry.register(Box::new(super::data::DataEngine));
         registry.register(Box::new(super::archive::ArchiveEngine));
         registry
     }
 }
+
 
 
 
