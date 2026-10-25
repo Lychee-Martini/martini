@@ -127,7 +127,7 @@ jobs:
 
       - name: Build Cross-Platform Installers (cargo-dist)
         run: |
-          cargo dist build --artifacts=global
+          dist build --artifacts=global
           cp target/distrib/martini-cli-installer.sh target/packages/martini-installer.sh
           cp target/distrib/martini-cli-installer.sh target/packages/martini-cli-installer.sh
           cp target/distrib/martini-cli-installer.ps1 target/packages/martini-installer.ps1
