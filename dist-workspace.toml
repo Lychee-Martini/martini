@@ -3,6 +3,7 @@ members = ["cargo:."]
 
 # Config for 'dist'
 [dist]
+cargo-dist-version = "0.33.1"
 # Don't overwrite custom release.yml workflow
 ci = []
 allow-dirty = ["ci"]

@@ -100,7 +100,7 @@ jobs:
         run: |
           cargo install cargo-deb --locked
           cargo install cargo-generate-rpm --locked
-          cargo install cargo-dist --locked
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.33.1/cargo-dist-installer.sh | sh
 
       - name: Install musl-tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
