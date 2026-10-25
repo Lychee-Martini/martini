@@ -100,7 +100,7 @@ fn main() {
 fn run(args: CliArgs) -> Result<i32, MartiniError> {
     match args.command {
         Commands::ListFormats => {
-            let formats = martini::get_supported_formats();
+            let formats = martini::all_capabilities();
             if args.json {
                 println!("{}", serde_json::to_string_pretty(&formats).unwrap());
             } else {

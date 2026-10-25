@@ -1,5 +1,5 @@
 use super::FormatEngine;
-use crate::converter::{ConvertOptions, Format, OutputFileMetadata};
+use crate::converter::{ConvertOptions, Format, FormatCapability, OutputFileMetadata};
 use crate::error::MartiniError;
 use flate2::Compression;
 use flate2::read::GzDecoder;
@@ -12,25 +12,22 @@ use tempfile::tempdir;
 pub struct ArchiveEngine;
 
 impl FormatEngine for ArchiveEngine {
-    fn name(&self) -> &'static str {
-        "archive"
-    }
-
     fn can_convert(&self, from: Format, to: Format) -> bool {
         from != to
             && matches!(from, Format::Zip | Format::Tar | Format::Gz)
             && matches!(to, Format::Zip | Format::Tar | Format::Gz)
     }
 
-    fn supported_pairs(&self) -> Vec<(Format, Format)> {
-        vec![
-            (Format::Zip, Format::Tar),
-            (Format::Tar, Format::Zip),
-            (Format::Zip, Format::Gz),
-            (Format::Gz, Format::Zip),
-            (Format::Tar, Format::Gz),
-            (Format::Gz, Format::Tar),
-        ]
+    fn capabilities(&self) -> Vec<FormatCapability> {
+        vec![FormatCapability::new(
+            "zip, tar, gz, tar.gz",
+            "zip, tar, gz, tar.gz",
+            "Convert compressed archives between ZIP, TAR, and TAR.GZ formats",
+            &[
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+            ],
+        )]
     }
 
     fn convert(

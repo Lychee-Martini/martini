@@ -1,5 +1,5 @@
 use super::FormatEngine;
-use crate::converter::{ConvertOptions, Format, OutputFileMetadata};
+use crate::converter::{ConvertOptions, Format, FormatCapability, OutputFileMetadata};
 use crate::error::MartiniError;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -10,10 +10,6 @@ use std::str::FromStr;
 pub struct DataEngine;
 
 impl FormatEngine for DataEngine {
-    fn name(&self) -> &'static str {
-        "data"
-    }
-
     fn can_convert(&self, from: Format, to: Format) -> bool {
         from != to
             && matches!(
@@ -26,23 +22,16 @@ impl FormatEngine for DataEngine {
             )
     }
 
-    fn supported_pairs(&self) -> Vec<(Format, Format)> {
-        let formats = [
-            Format::Json,
-            Format::Yaml,
-            Format::Toml,
-            Format::Csv,
-            Format::Tsv,
-        ];
-        let mut pairs = Vec::new();
-        for &from in &formats {
-            for &to in &formats {
-                if from != to {
-                    pairs.push((from, to));
-                }
-            }
-        }
-        pairs
+    fn capabilities(&self) -> Vec<FormatCapability> {
+        vec![FormatCapability::new(
+            "json, yaml, toml, csv, tsv",
+            "json, yaml, toml, csv, tsv",
+            "Convert structured data between JSON, YAML, TOML, CSV, and TSV formats",
+            &[
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+            ],
+        )]
     }
 
     fn convert(

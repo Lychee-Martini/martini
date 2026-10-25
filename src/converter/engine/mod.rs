@@ -1,23 +1,21 @@
-use crate::converter::{ConvertOptions, Format, OutputFileMetadata};
+use crate::converter::{ConvertOptions, Format, FormatCapability, OutputFileMetadata};
 use crate::error::MartiniError;
 use std::path::Path;
 
 pub mod archive;
 pub mod data;
+pub mod document;
 pub mod image;
 pub mod registry;
 pub use registry::EngineRegistry;
 
 /// A format conversion engine capable of handling specific (from, to) format pairs.
 pub trait FormatEngine: Send + Sync {
-    /// Unique identifier for this engine (e.g. "image", "document", "data", "archive")
-    fn name(&self) -> &'static str;
-
     /// Check if this engine can convert between `from` and `to`
     fn can_convert(&self, from: Format, to: Format) -> bool;
 
-    /// All (from, to) pairs supported by this engine
-    fn supported_pairs(&self) -> Vec<(Format, Format)>;
+    /// Human/agent-facing description of the conversions this engine supports
+    fn capabilities(&self) -> Vec<FormatCapability>;
 
     /// Perform conversion of a file
     fn convert(

@@ -1,18 +1,15 @@
 use martini::converter::engine::{EngineRegistry, FormatEngine};
-use martini::converter::{ConvertOptions, Format, OutputFileMetadata};
+use martini::converter::{ConvertOptions, Format, FormatCapability, OutputFileMetadata};
 use martini::error::MartiniError;
 use std::path::Path;
 
 struct DummyEngine;
 impl FormatEngine for DummyEngine {
-    fn name(&self) -> &'static str {
-        "dummy"
-    }
     fn can_convert(&self, from: Format, to: Format) -> bool {
         (from, to) == (Format::Json, Format::Yaml)
     }
-    fn supported_pairs(&self) -> Vec<(Format, Format)> {
-        vec![(Format::Json, Format::Yaml)]
+    fn capabilities(&self) -> Vec<FormatCapability> {
+        vec![FormatCapability::new("json", "yaml", "dummy", &[])]
     }
     fn convert(
         &self,
@@ -32,7 +29,9 @@ impl FormatEngine for DummyEngine {
 fn test_registry_registration_and_lookup() {
     let mut registry = EngineRegistry::empty();
     assert!(registry.find_engine(Format::Json, Format::Yaml).is_none());
+    assert!(registry.all_capabilities().is_empty());
     registry.register(Box::new(DummyEngine));
     assert!(registry.find_engine(Format::Json, Format::Yaml).is_some());
     assert!(registry.find_engine(Format::Png, Format::Jpg).is_none());
+    assert_eq!(registry.all_capabilities().len(), 1);
 }
