@@ -59,6 +59,8 @@ zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
 tar = "0.4.46"
 flate2 = "1.1.10"
 tempfile = "3.27.0"
+sha2 = "0.10"
+dirs = "6.0"
 # File watching
 notify = "8.2.0"
 
