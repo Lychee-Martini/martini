@@ -97,9 +97,10 @@ jobs:
           targets: x86_64-unknown-linux-musl
 
       - name: Install Packaging Tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deb,cargo-generate-rpm,cargo-dist
+        run: |
+          cargo install cargo-deb --locked
+          cargo install cargo-generate-rpm --locked
+          cargo install cargo-dist --locked
 
       - name: Install musl-tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
