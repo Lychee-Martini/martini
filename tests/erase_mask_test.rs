@@ -65,11 +65,17 @@ fn test_detect_text_synthetic_stroke() {
 
 #[test]
 fn test_detect_text_on_sample_image() {
-    let path = std::path::Path::new("F:\\Users\\yangz\\Downloads\\O1.jpg");
-    if !path.exists() {
-        return;
-    }
-    let img = image::open(path).expect("failed to open O1.jpg");
+    let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("sample_text_overlay.jpg");
+    assert!(
+        fixture_path.exists(),
+        "sample fixture not found at {}",
+        fixture_path.display()
+    );
+
+    let img = image::open(&fixture_path).expect("failed to open sample_text_overlay.jpg");
     let mask = martini::erase::mask::detect_text_mask(&img, 0.35);
 
     let mut positive_count = 0;
@@ -80,34 +86,36 @@ fn test_detect_text_on_sample_image() {
     }
     assert!(positive_count > 100);
 
-    let erased_path = std::path::Path::new("F:\\Users\\yangz\\Downloads\\O1_erased.jpg");
-    if erased_path.exists() {
-        let erased_img = image::open(erased_path).expect("failed to open erased img");
-        let (w, h) = img.dimensions();
-        let mut diff_count = 0;
-        let mut sum_orig_luma: u64 = 0;
-        let mut sum_erased_luma: u64 = 0;
-        for y in 0..h {
-            for x in 0..w {
-                let p1 = img.get_pixel(x, y);
-                let p2 = erased_img.get_pixel(x, y);
-                let diff = (p1[0] as i32 - p2[0] as i32).abs()
-                    + (p1[1] as i32 - p2[1] as i32).abs()
-                    + (p1[2] as i32 - p2[2] as i32).abs();
-                if diff > 30 {
-                    diff_count += 1;
-                    sum_orig_luma += (p1[0] as u64 + p1[1] as u64 + p1[2] as u64) / 3;
-                    sum_erased_luma += (p2[0] as u64 + p2[1] as u64 + p2[2] as u64) / 3;
-                }
+    // Inpaint in memory and verify text area was replaced with clean background
+    let paths = martini::erase::models::ModelPaths {
+        clip_weights: std::path::PathBuf::new(),
+        tokenizer: std::path::PathBuf::new(),
+        unet_weights: std::path::PathBuf::new(),
+        vae_weights: std::path::PathBuf::new(),
+    };
+    let pipeline = martini::erase::pipeline::InpaintPipeline::load(&paths).unwrap();
+    let inpainted = pipeline.inpaint(&img, &mask, 15).unwrap();
+
+    let (w, h) = img.dimensions();
+    let mut diff_count = 0;
+    let mut sum_orig_luma: u64 = 0;
+    let mut sum_erased_luma: u64 = 0;
+    for y in 0..h {
+        for x in 0..w {
+            let p1 = img.get_pixel(x, y);
+            let p2 = inpainted.get_pixel(x, y);
+            let diff = (p1[0] as i32 - p2[0] as i32).abs()
+                + (p1[1] as i32 - p2[1] as i32).abs()
+                + (p1[2] as i32 - p2[2] as i32).abs();
+            if diff > 30 {
+                diff_count += 1;
+                sum_orig_luma += (p1[0] as u64 + p1[1] as u64 + p1[2] as u64) / 3;
+                sum_erased_luma += (p2[0] as u64 + p2[1] as u64 + p2[2] as u64) / 3;
             }
         }
-        let avg_orig = sum_orig_luma.checked_div(diff_count).unwrap_or(0);
-        let avg_erased = sum_erased_luma.checked_div(diff_count).unwrap_or(0);
-        println!(
-            "Modified pixels: {} | Avg orig luma: {} | Avg erased luma: {}",
-            diff_count, avg_orig, avg_erased
-        );
-        assert!(diff_count > 1000);
-        assert!(avg_erased > avg_orig + 50);
     }
+    let avg_orig = sum_orig_luma.checked_div(diff_count).unwrap_or(0);
+    let avg_erased = sum_erased_luma.checked_div(diff_count).unwrap_or(0);
+    assert!(diff_count > 1000);
+    assert!(avg_erased > avg_orig + 50);
 }
