@@ -36,8 +36,8 @@ pub struct EraseArgs {
     #[arg(long, default_value_t = 0.35)]
     pub threshold: f32,
 
-    /// Mask boundary dilation radius in pixels (default: 8)
-    #[arg(long, default_value_t = 8)]
+    /// Mask boundary dilation radius in pixels (default: 3)
+    #[arg(long, default_value_t = 3)]
     pub dilate: u32,
 
     /// Save the intermediate generated binary mask for verification
@@ -112,9 +112,24 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
         } else {
             luma
         }
+    } else if let Some(ref target) = args.target {
+        // Text/watermark/annotation mask generation
+        let detected = mask::detect_text_mask(&img, args.threshold);
+        let mut count = 0;
+        for p in detected.pixels() {
+            if p[0] > 0 {
+                count += 1;
+            }
+        }
+        if count == 0 {
+            tracing::warn!(
+                "No target objects found matching '{}' with threshold {}",
+                target,
+                args.threshold
+            );
+        }
+        detected
     } else {
-        // Text-guided mask generation:
-        // In full pipeline with Candle weights, model runs CLIP-based text localization.
         GrayImage::new(img_w, img_h)
     };
 
@@ -146,7 +161,8 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
     let result_img = if let Some(bbox) = compute_bounding_box(&mask, 16) {
         let (crop_x, crop_y, crop_w, crop_h) = bbox;
         let crop_patch = img.crop_imm(crop_x, crop_y, crop_w, crop_h);
-        let inpainted_patch = pipeline.inpaint(&crop_patch, &mask, args.steps)?;
+        let crop_mask = imageops::crop_imm(&mask, crop_x, crop_y, crop_w, crop_h).to_image();
+        let inpainted_patch = pipeline.inpaint(&crop_patch, &crop_mask, args.steps)?;
         InpaintPipeline::blend_result(&img, &inpainted_patch, &mask, bbox)?
     } else {
         // If mask is empty, output is original image

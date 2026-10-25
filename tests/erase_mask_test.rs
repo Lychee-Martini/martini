@@ -1,4 +1,4 @@
-use image::{GrayImage, Luma};
+use image::{GenericImageView, GrayImage, Luma};
 
 #[test]
 fn test_dilate_mask_expands_boundaries() {
@@ -41,4 +41,73 @@ fn test_feather_mask_smooths_edges() {
     // Boundary pixel at 3,3 should be intermediate
     let edge_val = feathered.get_pixel(3, 3)[0];
     assert!(edge_val > 0 && edge_val < 255);
+}
+
+#[test]
+fn test_detect_text_synthetic_stroke() {
+    // 50x50 white background with black thin stroke in center
+    let mut img = image::RgbImage::from_pixel(50, 50, image::Rgb([240, 240, 240]));
+    for y in 20..30 {
+        // 2-pixel wide stroke
+        img.put_pixel(25, y, image::Rgb([10, 10, 10]));
+        img.put_pixel(26, y, image::Rgb([10, 10, 10]));
+    }
+    let dyn_img = image::DynamicImage::ImageRgb8(img);
+    let mask = martini::erase::mask::detect_text_mask(&dyn_img, 0.35);
+
+    // Pixels on the stroke should be detected
+    assert_eq!(mask.get_pixel(25, 25)[0], 255);
+    assert_eq!(mask.get_pixel(26, 25)[0], 255);
+    // Background pixels far away should be 0
+    assert_eq!(mask.get_pixel(5, 5)[0], 0);
+    assert_eq!(mask.get_pixel(45, 45)[0], 0);
+}
+
+#[test]
+fn test_detect_text_on_sample_image() {
+    let path = std::path::Path::new("F:\\Users\\yangz\\Downloads\\O1.jpg");
+    if !path.exists() {
+        return;
+    }
+    let img = image::open(path).expect("failed to open O1.jpg");
+    let mask = martini::erase::mask::detect_text_mask(&img, 0.35);
+
+    let mut positive_count = 0;
+    for pixel in mask.pixels() {
+        if pixel[0] > 0 {
+            positive_count += 1;
+        }
+    }
+    assert!(positive_count > 100);
+
+    let erased_path = std::path::Path::new("F:\\Users\\yangz\\Downloads\\O1_erased.jpg");
+    if erased_path.exists() {
+        let erased_img = image::open(erased_path).expect("failed to open erased img");
+        let (w, h) = img.dimensions();
+        let mut diff_count = 0;
+        let mut sum_orig_luma: u64 = 0;
+        let mut sum_erased_luma: u64 = 0;
+        for y in 0..h {
+            for x in 0..w {
+                let p1 = img.get_pixel(x, y);
+                let p2 = erased_img.get_pixel(x, y);
+                let diff = (p1[0] as i32 - p2[0] as i32).abs()
+                    + (p1[1] as i32 - p2[1] as i32).abs()
+                    + (p1[2] as i32 - p2[2] as i32).abs();
+                if diff > 30 {
+                    diff_count += 1;
+                    sum_orig_luma += (p1[0] as u64 + p1[1] as u64 + p1[2] as u64) / 3;
+                    sum_erased_luma += (p2[0] as u64 + p2[1] as u64 + p2[2] as u64) / 3;
+                }
+            }
+        }
+        let avg_orig = sum_orig_luma.checked_div(diff_count).unwrap_or(0);
+        let avg_erased = sum_erased_luma.checked_div(diff_count).unwrap_or(0);
+        println!(
+            "Modified pixels: {} | Avg orig luma: {} | Avg erased luma: {}",
+            diff_count, avg_orig, avg_erased
+        );
+        assert!(diff_count > 1000);
+        assert!(avg_erased > avg_orig + 50);
+    }
 }

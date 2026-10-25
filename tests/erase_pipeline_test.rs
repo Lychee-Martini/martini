@@ -43,3 +43,33 @@ fn test_blend_result_dimensions_match_original() {
     assert_eq!(blended.width(), 120);
     assert_eq!(blended.height(), 80);
 }
+
+#[test]
+fn test_inpaint_replaces_masked_pixels_with_background() {
+    // 60x60 white image with black box in center
+    let mut img = RgbaImage::from_pixel(60, 60, Rgba([255, 255, 255, 255]));
+    let mut mask = GrayImage::new(60, 60);
+
+    for y in 25..35 {
+        for x in 25..35 {
+            img.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+            mask.put_pixel(x, y, Luma([255]));
+        }
+    }
+
+    let dyn_img = DynamicImage::ImageRgba8(img);
+    let paths = martini::erase::models::ModelPaths {
+        clip_weights: std::path::PathBuf::new(),
+        tokenizer: std::path::PathBuf::new(),
+        unet_weights: std::path::PathBuf::new(),
+        vae_weights: std::path::PathBuf::new(),
+    };
+    let pipeline = martini::erase::pipeline::InpaintPipeline::load(&paths).unwrap();
+    let inpainted = pipeline.inpaint(&dyn_img, &mask, 15).unwrap();
+
+    // Center pixel should now be filled with surrounding white (> 250)
+    let center_px = inpainted.get_pixel(30, 30);
+    assert!(center_px[0] > 250);
+    assert!(center_px[1] > 250);
+    assert!(center_px[2] > 250);
+}
