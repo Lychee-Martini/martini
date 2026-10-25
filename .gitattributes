@@ -1,0 +1,31 @@
+# Enforce LF line endings for all text files across all platforms
+* text=auto eol=lf
+
+# Explicit text files
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.svg text eol=lf
+*.template text eol=lf
+*.lock text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf
+
+# Windows scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.zip binary
+*.tar.gz binary
+*.tar.xz binary
+*.wasm binary
