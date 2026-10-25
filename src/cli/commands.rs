@@ -203,6 +203,9 @@ pub enum Commands {
         #[arg(long)]
         overwrite: bool,
     },
+
+    /// Erase objects or watermarks from an image using natural language or a mask
+    Erase(crate::erase::EraseArgs),
 }
 
 #[derive(Subcommand, Debug)]

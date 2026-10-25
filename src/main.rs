@@ -29,6 +29,7 @@ where
                     | "list-formats"
                     | "preset"
                     | "watch"
+                    | "erase"
                     | "help"
                     | "--help"
                     | "-h"
@@ -687,6 +688,10 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             watcher.run(rx)?;
             Ok(0)
         }
+        Commands::Erase(erase_args) => {
+            martini::erase::run_erase(&erase_args)?;
+            Ok(0)
+        }
     }
 }
 
@@ -735,6 +740,17 @@ mod tests {
         let normalized = normalize_args(args);
         let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
         assert_eq!(strs, vec!["martini", "list-formats"]);
+    }
+
+    #[test]
+    fn test_normalize_args_erase() {
+        let args = vec!["martini", "erase", "test.png", "--target", "dog"];
+        let normalized = normalize_args(args);
+        let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
+        assert_eq!(
+            strs,
+            vec!["martini", "erase", "test.png", "--target", "dog"]
+        );
     }
 
     #[test]
