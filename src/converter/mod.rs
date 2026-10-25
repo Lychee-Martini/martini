@@ -67,7 +67,7 @@ impl FromStr for Format {
             "tsv" => Ok(Format::Tsv),
             "zip" => Ok(Format::Zip),
             "tar" => Ok(Format::Tar),
-            "gz" | "gzip" => Ok(Format::Gz),
+            "gz" | "gzip" | "tar.gz" | "targz" | "tgz" => Ok(Format::Gz),
             "bmp" => Ok(Format::Bmp),
             "tiff" | "tif" => Ok(Format::Tiff),
             "qoi" => Ok(Format::Qoi),
@@ -180,7 +180,7 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
         }
     }
 
-    let img_from = "svg, png, jpg, jpeg, webp, avif";
+    let img_from = "svg, png, jpg, jpeg, webp, avif, bmp, tiff, qoi";
     let batch_base = &[
         ("overwrite", "boolean (default false)"),
         ("delete_original", "boolean (default false)"),
@@ -250,6 +250,14 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
                 ("workers", "integer (optional)"),
             ],
         ),
+        cap(img_from, "bmp", "Convert images to BMP format", batch_base),
+        cap(
+            img_from,
+            "tiff",
+            "Convert images to TIFF format",
+            batch_base,
+        ),
+        cap(img_from, "qoi", "Convert images to QOI format", batch_base),
         cap(
             "pdf",
             "png, jpg, jpeg, webp, avif",
@@ -297,6 +305,24 @@ pub fn get_supported_formats() -> Vec<FormatCapability> {
                 ("overwrite", "boolean (default false)"),
             ],
         ),
+        cap(
+            "json, yaml, toml, csv, tsv",
+            "json, yaml, toml, csv, tsv",
+            "Convert structured data between JSON, YAML, TOML, CSV, and TSV formats",
+            &[
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+            ],
+        ),
+        cap(
+            "zip, tar, gz, tar.gz",
+            "zip, tar, gz, tar.gz",
+            "Convert compressed archives between ZIP, TAR, and TAR.GZ formats",
+            &[
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+            ],
+        ),
     ]
 }
 
@@ -325,6 +351,57 @@ pub fn convert(
             from: from.to_string(),
             to: to.to_string(),
         })
+    } else if engine::FormatEngine::can_convert(&engine::data::DataEngine, from, to) {
+        let (input_path, _temp_file) = if options.input_path.exists() {
+            (options.input_path.clone(), None)
+        } else {
+            let mut temp = tempfile::Builder::new()
+                .suffix(&format!(".{}", from))
+                .tempfile()
+                .map_err(MartiniError::Io)?;
+            std::io::Write::write_all(&mut temp, input_data).map_err(MartiniError::Io)?;
+            let path = temp.path().to_path_buf();
+            (path, Some(temp))
+        };
+        let meta = engine::data::DataEngine.convert_with_formats(
+            &input_path,
+            &options.output_path,
+            from,
+            to,
+        )?;
+        Ok(ConversionResult {
+            from,
+            to,
+            output_files: vec![meta],
+        })
+    } else if engine::FormatEngine::can_convert(&engine::archive::ArchiveEngine, from, to) {
+        let (input_path, _temp_file) = if options.input_path.exists() {
+            (options.input_path.clone(), None)
+        } else {
+            let suffix = if from == Format::Gz {
+                ".tar.gz"
+            } else {
+                &format!(".{}", from)
+            };
+            let mut temp = tempfile::Builder::new()
+                .suffix(suffix)
+                .tempfile()
+                .map_err(MartiniError::Io)?;
+            std::io::Write::write_all(&mut temp, input_data).map_err(MartiniError::Io)?;
+            let path = temp.path().to_path_buf();
+            (path, Some(temp))
+        };
+        let meta = engine::archive::ArchiveEngine.convert_with_formats(
+            &input_path,
+            &options.output_path,
+            from,
+            to,
+        )?;
+        Ok(ConversionResult {
+            from,
+            to,
+            output_files: vec![meta],
+        })
     } else {
         image_conv::convert_image(from, to, input_data, options)
     }
@@ -338,5 +415,15 @@ mod tests {
         let formats = get_supported_formats();
         assert!(!formats.is_empty());
         assert!(formats.iter().any(|f| f.to == "favicon"));
+        assert!(
+            formats
+                .iter()
+                .any(|f| f.description.contains("structured data"))
+        );
+        assert!(
+            formats
+                .iter()
+                .any(|f| f.description.contains("compressed archives"))
+        );
     }
 }

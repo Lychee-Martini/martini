@@ -65,8 +65,19 @@ pub fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> V
         "webp" => ["webp"].iter().copied().collect(),
         "avif" => ["avif"].iter().copied().collect(),
         "svg" => ["svg"].iter().copied().collect(),
+        "bmp" => ["bmp"].iter().copied().collect(),
+        "tiff" | "tif" => ["tiff", "tif"].iter().copied().collect(),
+        "qoi" => ["qoi"].iter().copied().collect(),
         "pdf" => ["pdf"].iter().copied().collect(),
         "md" | "markdown" => ["md", "markdown"].iter().copied().collect(),
+        "json" => ["json"].iter().copied().collect(),
+        "yaml" | "yml" => ["yaml", "yml"].iter().copied().collect(),
+        "toml" => ["toml"].iter().copied().collect(),
+        "csv" => ["csv"].iter().copied().collect(),
+        "tsv" => ["tsv"].iter().copied().collect(),
+        "zip" => ["zip"].iter().copied().collect(),
+        "tar" => ["tar"].iter().copied().collect(),
+        "gz" | "tar.gz" | "tgz" => ["gz", "tgz"].iter().copied().collect(),
         _ => ["png", "jpg", "jpeg"].iter().copied().collect(), // default/auto
     };
 

@@ -53,7 +53,18 @@ impl FormatEngine for DataEngine {
     ) -> Result<OutputFileMetadata, MartiniError> {
         let from = detect_format(input)?;
         let to = detect_format(output)?;
+        self.convert_with_formats(input, output, from, to)
+    }
+}
 
+impl DataEngine {
+    pub fn convert_with_formats(
+        &self,
+        input: &Path,
+        output: &Path,
+        from: Format,
+        to: Format,
+    ) -> Result<OutputFileMetadata, MartiniError> {
         let value = read_data(input, from)?;
         write_data(&value, output, to)?;
 

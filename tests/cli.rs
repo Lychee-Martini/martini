@@ -811,3 +811,72 @@ fn test_no_args_exits_zero() {
         .success()
         .stdout(predicate::str::contains("Usage: martini"));
 }
+
+#[test]
+fn test_list_formats_shows_data_and_archive() {
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("list-formats")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "[json/yaml/toml/csv/tsv] -> [json/yaml/toml/csv/tsv]",
+        ))
+        .stdout(predicate::str::contains(
+            "[zip/tar/gz/tar.gz] -> [zip/tar/gz/tar.gz]",
+        ));
+}
+
+#[test]
+fn test_cli_convert_data_json_to_yaml() {
+    let temp_dir = tempdir().unwrap();
+    let json_file = temp_dir.path().join("input.json");
+    let yaml_file = temp_dir.path().join("output.yaml");
+    fs::write(&json_file, r#"{"name": "martini", "awesome": true}"#).unwrap();
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg(&json_file)
+        .arg(&yaml_file)
+        .assert()
+        .success();
+
+    assert!(yaml_file.exists());
+    let content = fs::read_to_string(&yaml_file).unwrap();
+    assert!(content.contains("name: martini"));
+    assert!(content.contains("awesome: true"));
+}
+
+#[test]
+fn test_cli_convert_archive_tar_to_zip() {
+    let temp_dir = tempdir().unwrap();
+    let tar_file = temp_dir.path().join("archive.tar");
+    let zip_file = temp_dir.path().join("archive.zip");
+
+    {
+        let mut tar_builder = tar::Builder::new(fs::File::create(&tar_file).unwrap());
+        let mut header = tar::Header::new_gnu();
+        let data = b"martini archive test";
+        header.set_size(data.len() as u64);
+        header.set_cksum();
+        tar_builder
+            .append_data(&mut header, "test.txt", &data[..])
+            .unwrap();
+        tar_builder.finish().unwrap();
+    }
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg(&tar_file)
+        .arg(&zip_file)
+        .assert()
+        .success();
+
+    assert!(zip_file.exists());
+    let file = fs::File::open(&zip_file).unwrap();
+    let mut zip = zip::ZipArchive::new(file).unwrap();
+    let mut entry = zip.by_name("test.txt").expect("test.txt must exist in zip");
+    use std::io::Read;
+    let mut content = String::new();
+    entry.read_to_string(&mut content).unwrap();
+    assert_eq!(content, "martini archive test");
+}

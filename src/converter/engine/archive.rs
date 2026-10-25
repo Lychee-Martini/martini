@@ -41,7 +41,18 @@ impl FormatEngine for ArchiveEngine {
     ) -> Result<OutputFileMetadata, MartiniError> {
         let from = detect_archive_format(input);
         let to = detect_archive_format(output);
+        self.convert_with_formats(input, output, from, to)
+    }
+}
 
+impl ArchiveEngine {
+    pub fn convert_with_formats(
+        &self,
+        input: &Path,
+        output: &Path,
+        from: Format,
+        to: Format,
+    ) -> Result<OutputFileMetadata, MartiniError> {
         let temp_dir = tempdir().map_err(MartiniError::Io)?;
         extract_archive(input, temp_dir.path(), from)?;
 

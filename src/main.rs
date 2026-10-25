@@ -106,20 +106,28 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             } else {
                 println!("Supported Conversions:");
                 for f in formats {
-                    let display_from = if f.from == "svg, png, jpg, jpeg, webp, avif" {
+                    let display_from = if f.from.starts_with("svg, png") {
                         "[any]".to_string()
+                    } else if f.from == "json, yaml, toml, csv, tsv" {
+                        "[json/yaml/toml/csv/tsv]".to_string()
+                    } else if f.from == "zip, tar, gz, tar.gz" {
+                        "[zip/tar/gz/tar.gz]".to_string()
                     } else {
                         f.from.clone()
                     };
                     let display_to = if f.to == "png, jpg, jpeg, webp, avif" {
                         "[png/jpg/webp/avif]".to_string()
+                    } else if f.to == "json, yaml, toml, csv, tsv" {
+                        "[json/yaml/toml/csv/tsv]".to_string()
+                    } else if f.to == "zip, tar, gz, tar.gz" {
+                        "[zip/tar/gz/tar.gz]".to_string()
                     } else {
                         f.to.clone()
                     };
 
                     let options_str = match f.to.as_str() {
                         "favicon" => ". Options: --package",
-                        "png" => "",
+                        "png" | "bmp" | "tiff" | "qoi" => "",
                         "jpg" => ". Options: --quality",
                         "webp" | "avif" | "both" => ". Options: --quality, --lossless",
                         "docx" => ". Options: --overwrite",
@@ -127,6 +135,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                             ". Options: --theme, --paper-size, --margin, --font-family, --header, --footer, --no-page-numbers, --toc, --overwrite"
                         }
                         _ if f.from == "pdf" => ". Options: --pages, --dpi, --quality, --lossless",
+                        _ if f.parameters.contains_key("overwrite") => ". Options: --overwrite",
                         _ => "",
                     };
 
@@ -303,29 +312,30 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             }
 
             // Resolve output formats (targets)
-            let is_svg = input_resolved
+            let input_name_lower = input_resolved
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let input_ext = input_resolved
                 .extension()
                 .and_then(|e| e.to_str())
-                .map(|s| s.to_lowercase() == "svg")
-                .unwrap_or(false);
-            let is_pdf = input_resolved
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|s| s.to_lowercase() == "pdf")
-                .unwrap_or(false);
-            let is_md = input_resolved
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|s| {
-                    let ext = s.to_lowercase();
-                    ext == "md" || ext == "markdown"
-                })
-                .unwrap_or(false);
+                .unwrap_or("")
+                .to_lowercase();
+
+            let is_svg = input_ext == "svg";
+            let is_pdf = input_ext == "pdf";
+            let is_md = input_ext == "md" || input_ext == "markdown";
 
             let to_resolved = match to {
                 Some(ref t) => t.clone(),
                 None => {
                     if let Some(ref out_path) = output {
+                        let out_name = out_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_lowercase();
                         if out_path.is_dir() {
                             if is_svg {
                                 "favicon".to_string()
@@ -333,9 +343,22 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                 "png".to_string()
                             } else if is_md {
                                 "pdf".to_string()
+                            } else if matches!(input_ext.as_str(), "json" | "csv" | "tsv") {
+                                "yaml".to_string()
+                            } else if matches!(input_ext.as_str(), "yaml" | "yml" | "toml") {
+                                "json".to_string()
+                            } else if input_name_lower.ends_with(".tar.gz")
+                                || input_name_lower.ends_with(".tgz")
+                                || input_ext == "tar"
+                            {
+                                "zip".to_string()
+                            } else if input_ext == "zip" {
+                                "tar.gz".to_string()
                             } else {
                                 "webp".to_string()
                             }
+                        } else if out_name.ends_with(".tar.gz") || out_name.ends_with(".tgz") {
+                            "tar.gz".to_string()
                         } else if let Some(ext) = out_path.extension().and_then(|e| e.to_str()) {
                             let ext_lower = ext.to_lowercase();
                             if ext_lower == "ico" || ext_lower == "html" {
@@ -343,27 +366,45 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                             } else {
                                 ext_lower
                             }
-                        } else {
-                            if is_svg {
-                                "favicon".to_string()
-                            } else if is_pdf {
-                                "png".to_string()
-                            } else if is_md {
-                                "pdf".to_string()
-                            } else {
-                                "webp".to_string()
-                            }
-                        }
-                    } else {
-                        if is_svg {
+                        } else if is_svg {
                             "favicon".to_string()
                         } else if is_pdf {
                             "png".to_string()
                         } else if is_md {
                             "pdf".to_string()
+                        } else if matches!(input_ext.as_str(), "json" | "csv" | "tsv") {
+                            "yaml".to_string()
+                        } else if matches!(input_ext.as_str(), "yaml" | "yml" | "toml") {
+                            "json".to_string()
+                        } else if input_name_lower.ends_with(".tar.gz")
+                            || input_name_lower.ends_with(".tgz")
+                            || input_ext == "tar"
+                        {
+                            "zip".to_string()
+                        } else if input_ext == "zip" {
+                            "tar.gz".to_string()
                         } else {
                             "webp".to_string()
                         }
+                    } else if is_svg {
+                        "favicon".to_string()
+                    } else if is_pdf {
+                        "png".to_string()
+                    } else if is_md {
+                        "pdf".to_string()
+                    } else if matches!(input_ext.as_str(), "json" | "csv" | "tsv") {
+                        "yaml".to_string()
+                    } else if matches!(input_ext.as_str(), "yaml" | "yml" | "toml") {
+                        "json".to_string()
+                    } else if input_name_lower.ends_with(".tar.gz")
+                        || input_name_lower.ends_with(".tgz")
+                        || input_ext == "tar"
+                    {
+                        "zip".to_string()
+                    } else if input_ext == "zip" {
+                        "tar.gz".to_string()
+                    } else {
+                        "webp".to_string()
                     }
                 }
             };
@@ -482,11 +523,21 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             } else {
                 // Single file conversion
                 let from_fmt = if from == "auto" {
-                    let file_ext = input_resolved
-                        .extension()
-                        .and_then(|e| e.to_str())
+                    let file_name = input_resolved
+                        .file_name()
+                        .and_then(|n| n.to_str())
                         .unwrap_or("")
                         .to_lowercase();
+                    let file_ext = if file_name.ends_with(".tar.gz") || file_name.ends_with(".tgz")
+                    {
+                        "tar.gz".to_string()
+                    } else {
+                        input_resolved
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("")
+                            .to_lowercase()
+                    };
                     Format::from_str(&file_ext).map_err(|_| {
                         MartiniError::UnsupportedConversion {
                             from: file_ext,
@@ -518,14 +569,46 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                                         reason: "Input path has no filename".to_string(),
                                     }
                                 })?;
-                                out.join(filename).with_extension(target_fmt.to_string())
+                                let filename_str = filename.to_string_lossy();
+                                let base_stem = if filename_str.to_lowercase().ends_with(".tar.gz")
+                                {
+                                    &filename_str[..filename_str.len() - 7]
+                                } else if let Some(dot_idx) = filename_str.rfind('.') {
+                                    &filename_str[..dot_idx]
+                                } else {
+                                    &filename_str
+                                };
+                                let ext = if *target_fmt == Format::Gz {
+                                    "tar.gz"
+                                } else {
+                                    &target_fmt.to_string()
+                                };
+                                out.join(format!("{}.{}", base_stem, ext))
                             } else if targets.len() > 1 {
                                 out.with_extension(target_fmt.to_string())
                             } else {
                                 out.clone()
                             }
                         }
-                        None => input_resolved.with_extension(target_fmt.to_string()),
+                        None => {
+                            let filename_str = input_resolved
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("");
+                            let base_stem = if filename_str.to_lowercase().ends_with(".tar.gz") {
+                                &filename_str[..filename_str.len() - 7]
+                            } else if let Some(dot_idx) = filename_str.rfind('.') {
+                                &filename_str[..dot_idx]
+                            } else {
+                                filename_str
+                            };
+                            let ext = if *target_fmt == Format::Gz {
+                                "tar.gz"
+                            } else {
+                                &target_fmt.to_string()
+                            };
+                            input_resolved.with_file_name(format!("{}.{}", base_stem, ext))
+                        }
                     };
 
                     if out_path.exists() && !overwrite {

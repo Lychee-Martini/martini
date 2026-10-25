@@ -9,8 +9,9 @@ A modern, extensible, and high-performance CLI format converter written in Rust.
 - 📦 **Favicon generation from any source**: Converts **both** SVG vector files (rendered dynamically at multiple resolutions) and standard raster images (downscaled using Lanczos3 filtering) to a favicon:
   - **Default**: Generates a standard multi-resolution `favicon.ico` containing `16x16`, `32x32`, and `48x48` dimensions.
   - **Package Mode (`--package`)**: Generates a comprehensive modern suite of assets including `favicon.ico`, PNGs (16x16, 32x32, 180x180, 192x192, 512x512), `site.webmanifest`, and copy-pasteable HTML header tags.
-- 📊 **Structured Data Formats Transcoding**: Fast, pure-Rust bidirectional conversion between JSON, YAML, TOML, and tabular CSV / TSV formats with automatic column schema union.
-- 🗜️ **Archive Compression & Extraction**: Convert between ZIP, TAR, and TAR.GZ directly without external tools; extract archives into folders or compress directories into archive formats with path traversal sanitization.
+- 📊 **Structured Data Formats Transcoding (`DataEngine`)**: Fast, pure-Rust bidirectional conversion between JSON, YAML, TOML, and tabular CSV / TSV formats with automatic column schema union.
+- 🗜️ **Archive Compression & Extraction (`ArchiveEngine`)**: Convert between ZIP, TAR, and TAR.GZ directly without external tools; extract archives into folders or compress directories into archive formats with path traversal sanitization.
+- ✨ **Smart Object & Watermark Erasure (`martini erase`)**: Erase unwanted objects, text, watermarks, or persons from images using natural language prompts (`--target text`) or custom binary masks. Runs entirely locally and offline on CPU with adaptive edge dilation and feathering.
 - ⚙️ **Conversion Presets System**: Store and reuse conversion preferences in `martini-presets.toml` or user global configuration. Inspect available presets with `martini preset list` and `martini preset show <name>`.
 - 👁️ **Directory Watching Daemon (`martini watch`)**: Automated headless inbox/outbox file monitoring daemon with settle debouncing, anti-loop output protection, backlog initial scanning, and customizable original file lifecycle (`keep`, `delete`, `move_originals`).
 - 🏎️ **Concurrently Optimized Batch Processing**: Process a single file or a whole directory concurrently using a `rayon` thread pool. Includes customizable worker threads and directory recursion (`-r`).
@@ -104,13 +105,33 @@ For more details on package managers and secrets, see [Distribution Guide](docs/
 
 ### 1. View Supported Formats
 
-Retrieve supported format pairs and metadata (default outputs JSON structure):
+Retrieve supported format pairs and metadata:
 
 ```bash
 martini list-formats
 ```
 
-Or structured JSON:
+Output:
+
+```text
+Supported Conversions:
+- [any] -> favicon: Convert an SVG or raster image to a Chrome favicon (.ico or full favicon package). Options: --package
+- [any] -> png: Convert images to PNG format
+- [any] -> jpg: Convert images to JPEG format. Options: --quality
+- [any] -> webp: Convert images to WebP format. Options: --quality, --lossless
+- [any] -> avif: Convert images to AVIF format. Options: --quality, --lossless
+- [any] -> both: Convert images to both WebP and AVIF formats. Options: --quality, --lossless
+- [any] -> bmp: Convert images to BMP format
+- [any] -> tiff: Convert images to TIFF format
+- [any] -> qoi: Convert images to QOI format
+- pdf -> [png/jpg/webp/avif]: Convert PDF pages to images. Options: --pages, --dpi, --quality, --lossless
+- md -> docx: Convert Markdown documents to Microsoft Word (DOCX) files. Options: --overwrite
+- md -> pdf: Convert Markdown documents to PDF files with Pure Rust engine. Options: --theme, --paper-size, --margin, --font-family, --header, --footer, --no-page-numbers, --toc, --overwrite
+- [json/yaml/toml/csv/tsv] -> [json/yaml/toml/csv/tsv]: Convert structured data between JSON, YAML, TOML, CSV, and TSV formats. Options: --overwrite
+- [zip/tar/gz/tar.gz] -> [zip/tar/gz/tar.gz]: Convert compressed archives between ZIP, TAR, and TAR.GZ formats. Options: --overwrite
+```
+
+Or structured JSON for Agents:
 
 ```bash
 martini list-formats --json
@@ -224,17 +245,26 @@ $$DCF = \sum_{t=1}^{n} \frac{FCF_t}{(1+WACC)^t} + \frac{FCF_n \times (1+g)}{(WAC
 Convert between popular configuration and tabular data formats with automatic schema inference and column union:
 
 ```bash
-# Convert JSON to YAML
+
+# Convert JSON to YAML (concise positional syntax or convert subcommand)
+martini config.json config.yaml
+# or
 martini convert -i config.json -o config.yaml
 
+# Convert YAML to TOML
+martini config.yaml config.toml
+
 # Convert TOML configuration to JSON
-martini convert -i settings.toml -o settings.json
+martini settings.toml settings.json
 
 # Convert JSON array of objects to CSV or TSV
-martini convert -i records.json -o records.csv
+martini records.json records.csv
 
 # Convert CSV to TSV or JSON
-martini convert -i data.csv -o data.json
+martini data.csv data.json
+
+# Convert in-place or specify target format with --to
+martini convert data.json --to yaml
 ```
 
 ### 9. Archive Transcoding & Extraction (ZIP / TAR / TAR.GZ)
@@ -242,8 +272,20 @@ martini convert -i data.csv -o data.json
 Transcode between archive formats without intermediate disk clutter, or extract with path traversal sanitization:
 
 ```bash
-# Transcode ZIP directly to compressed TAR.GZ
+
+# Transcode ZIP directly to compressed TAR.GZ (positional or flag syntax)
+martini bundle.zip bundle.tar.gz
+# or
 martini convert -i bundle.zip -o bundle.tar.gz
+
+# Transcode TAR.GZ directly to ZIP
+martini bundle.tar.gz bundle.zip
+
+# Transcode TAR to ZIP
+martini backup.tar backup.zip
+
+# Transcode using --to flag
+martini convert bundle.zip --to tar.gz
 
 # Extract ZIP or TAR archive to a directory
 martini convert -i release.zip -o ./dist
@@ -311,6 +353,33 @@ martini watch -i ./inbox -o ./outbox --to webp --delete-original
 # Or move source files to an archive folder after successful processing
 martini watch -i ./inbox -o ./outbox --to webp --move-originals ./processed
 ```
+
+### 13. Erase Objects & Watermarks (`martini erase`)
+
+Erase unwanted objects, text, watermarks, or persons from images using natural language prompts or custom binary masks:
+
+```bash
+
+# Erase text overlay from an image using natural language
+martini erase photo.jpg -t text
+
+# Erase a watermark with custom output path
+martini erase document.png --target watermark -o document_clean.png
+
+# Erase an object using a pre-existing binary mask image
+martini erase input.jpg --mask mask.png
+
+# Fine-tune mask sensitivity threshold and boundary dilation radius (in pixels)
+martini erase image.jpg -t text --threshold 0.35 --dilate 5
+
+# Save the intermediate generated binary mask for verification
+martini erase image.jpg -t watermark --save-mask
+
+# Output execution metadata as structured JSON
+martini erase photo.jpg -t text --json
+```
+
+All inpainting runs locally and offline on CPU with zero cloud API dependencies, complete privacy, and memory consumption under 2 GB.
 
 ---
 
