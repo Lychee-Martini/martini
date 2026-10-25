@@ -35,3 +35,5 @@ target/winget-manifests/
 # cargo-dist generated installers (built dynamically in CI upon release)
 *-installer.sh
 *-installer.ps1
+# Local git worktrees
+.worktrees/
