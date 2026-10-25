@@ -220,7 +220,7 @@ fn encode_avif(img: &DynamicImage, quality: u8, lossless: bool) -> Result<Vec<u8
         })
         .collect();
 
-    let imgref = imgref::Img::new(pixels.as_slice(), width, height);
+    let imgref = ravif::Img::new(pixels.as_slice(), width, height);
 
     let qual = if lossless { 100.0 } else { quality as f32 };
 

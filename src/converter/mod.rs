@@ -76,6 +76,19 @@ impl FromStr for Format {
     }
 }
 
+impl Format {
+    pub fn from_path(path: &std::path::Path) -> Result<Self, MartiniError> {
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        Self::from_str(&ext).map_err(|_| MartiniError::InvalidInputData {
+            reason: format!("Unsupported format extension: '{}'", ext),
+        })
+    }
+}
+
 impl std::fmt::Display for Format {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -211,23 +224,8 @@ pub fn convert(
             to: to.to_string(),
         })
     } else if engine::FormatEngine::can_convert(&engine::data::DataEngine, from, to) {
-        let (input_path, _temp_file) = if options.input_path.exists() {
-            (options.input_path.clone(), None)
-        } else {
-            let mut temp = tempfile::Builder::new()
-                .suffix(&format!(".{}", from))
-                .tempfile()
-                .map_err(MartiniError::Io)?;
-            std::io::Write::write_all(&mut temp, input_data).map_err(MartiniError::Io)?;
-            let path = temp.path().to_path_buf();
-            (path, Some(temp))
-        };
-        let meta = engine::data::DataEngine.convert_with_formats(
-            &input_path,
-            &options.output_path,
-            from,
-            to,
-        )?;
+        let meta =
+            engine::data::DataEngine.convert_slice(input_data, &options.output_path, from, to)?;
         Ok(ConversionResult {
             from,
             to,

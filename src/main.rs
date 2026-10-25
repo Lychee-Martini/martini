@@ -323,10 +323,6 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 .unwrap_or("")
                 .to_lowercase();
 
-            let is_svg = input_ext == "svg";
-            let is_pdf = input_ext == "pdf";
-            let is_md = input_ext == "md" || input_ext == "markdown";
-
             let to_resolved = match to {
                 Some(ref t) => t.clone(),
                 None => {
@@ -337,26 +333,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                             .unwrap_or("")
                             .to_lowercase();
                         if out_path.is_dir() {
-                            if is_svg {
-                                "favicon".to_string()
-                            } else if is_pdf {
-                                "png".to_string()
-                            } else if is_md {
-                                "pdf".to_string()
-                            } else if matches!(input_ext.as_str(), "json" | "csv" | "tsv") {
-                                "yaml".to_string()
-                            } else if matches!(input_ext.as_str(), "yaml" | "yml" | "toml") {
-                                "json".to_string()
-                            } else if input_name_lower.ends_with(".tar.gz")
-                                || input_name_lower.ends_with(".tgz")
-                                || input_ext == "tar"
-                            {
-                                "zip".to_string()
-                            } else if input_ext == "zip" {
-                                "tar.gz".to_string()
-                            } else {
-                                "webp".to_string()
-                            }
+                            default_target_for_ext(&input_ext, &input_name_lower).to_string()
                         } else if out_name.ends_with(".tar.gz") || out_name.ends_with(".tgz") {
                             "tar.gz".to_string()
                         } else if let Some(ext) = out_path.extension().and_then(|e| e.to_str()) {
@@ -366,45 +343,11 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                             } else {
                                 ext_lower
                             }
-                        } else if is_svg {
-                            "favicon".to_string()
-                        } else if is_pdf {
-                            "png".to_string()
-                        } else if is_md {
-                            "pdf".to_string()
-                        } else if matches!(input_ext.as_str(), "json" | "csv" | "tsv") {
-                            "yaml".to_string()
-                        } else if matches!(input_ext.as_str(), "yaml" | "yml" | "toml") {
-                            "json".to_string()
-                        } else if input_name_lower.ends_with(".tar.gz")
-                            || input_name_lower.ends_with(".tgz")
-                            || input_ext == "tar"
-                        {
-                            "zip".to_string()
-                        } else if input_ext == "zip" {
-                            "tar.gz".to_string()
                         } else {
-                            "webp".to_string()
+                            default_target_for_ext(&input_ext, &input_name_lower).to_string()
                         }
-                    } else if is_svg {
-                        "favicon".to_string()
-                    } else if is_pdf {
-                        "png".to_string()
-                    } else if is_md {
-                        "pdf".to_string()
-                    } else if matches!(input_ext.as_str(), "json" | "csv" | "tsv") {
-                        "yaml".to_string()
-                    } else if matches!(input_ext.as_str(), "yaml" | "yml" | "toml") {
-                        "json".to_string()
-                    } else if input_name_lower.ends_with(".tar.gz")
-                        || input_name_lower.ends_with(".tgz")
-                        || input_ext == "tar"
-                    {
-                        "zip".to_string()
-                    } else if input_ext == "zip" {
-                        "tar.gz".to_string()
                     } else {
-                        "webp".to_string()
+                        default_target_for_ext(&input_ext, &input_name_lower).to_string()
                     }
                 }
             };
@@ -778,6 +721,26 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
     }
 }
 
+fn default_target_for_ext(ext: &str, file_name: &str) -> &'static str {
+    if ext == "svg" {
+        "favicon"
+    } else if ext == "pdf" {
+        "png"
+    } else if ext == "md" || ext == "markdown" {
+        "pdf"
+    } else if matches!(ext, "json" | "csv" | "tsv") {
+        "yaml"
+    } else if matches!(ext, "yaml" | "yml" | "toml") {
+        "json"
+    } else if file_name.ends_with(".tar.gz") || file_name.ends_with(".tgz") || ext == "tar" {
+        "zip"
+    } else if ext == "zip" {
+        "tar.gz"
+    } else {
+        "webp"
+    }
+}
+
 fn is_glob_pattern(path: &std::path::Path) -> bool {
     let s = path.to_string_lossy();
     s.contains('*') || s.contains('?') || (s.contains('[') && s.contains(']'))
@@ -863,5 +826,17 @@ mod tests {
         let normalized = normalize_args(args);
         let strs: Vec<_> = normalized.iter().map(|s| s.to_str().unwrap()).collect();
         assert_eq!(strs, vec!["martini"]);
+    }
+
+    #[test]
+    fn test_default_target_for_ext() {
+        assert_eq!(default_target_for_ext("svg", "logo.svg"), "favicon");
+        assert_eq!(default_target_for_ext("pdf", "doc.pdf"), "png");
+        assert_eq!(default_target_for_ext("md", "readme.md"), "pdf");
+        assert_eq!(default_target_for_ext("json", "data.json"), "yaml");
+        assert_eq!(default_target_for_ext("yaml", "data.yaml"), "json");
+        assert_eq!(default_target_for_ext("gz", "archive.tar.gz"), "zip");
+        assert_eq!(default_target_for_ext("zip", "archive.zip"), "tar.gz");
+        assert_eq!(default_target_for_ext("png", "image.png"), "webp");
     }
 }

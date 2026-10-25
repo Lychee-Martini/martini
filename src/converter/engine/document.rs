@@ -5,7 +5,6 @@ use crate::converter::{
 use crate::error::MartiniError;
 use std::fs;
 use std::path::Path;
-use std::str::FromStr;
 
 /// Markdown -> PDF/DOCX and PDF -> raster images.
 pub struct DocumentEngine;
@@ -80,8 +79,8 @@ impl FormatEngine for DocumentEngine {
         output: &Path,
         options: &ConvertOptions,
     ) -> Result<OutputFileMetadata, MartiniError> {
-        let from = detect_format(input)?;
-        let to = detect_format(output)?;
+        let from = Format::from_path(input)?;
+        let to = Format::from_path(output)?;
 
         let input_bytes = fs::read(input)?;
         let opts = ConvertOptions {
@@ -110,15 +109,4 @@ impl FormatEngine for DocumentEngine {
                 reason: format!("Conversion from {} to {} produced no output", from, to),
             })
     }
-}
-
-fn detect_format(path: &Path) -> Result<Format, MartiniError> {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    Format::from_str(&ext).map_err(|_| MartiniError::InvalidInputData {
-        reason: format!("Unsupported document format extension: '{}'", ext),
-    })
 }

@@ -5,7 +5,6 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
-use std::str::FromStr;
 
 pub struct DataEngine;
 
@@ -40,8 +39,8 @@ impl FormatEngine for DataEngine {
         output: &Path,
         _options: &ConvertOptions,
     ) -> Result<OutputFileMetadata, MartiniError> {
-        let from = detect_format(input)?;
-        let to = detect_format(output)?;
+        let from = Format::from_path(input)?;
+        let to = Format::from_path(output)?;
         self.convert_with_formats(input, output, from, to)
     }
 }
@@ -54,7 +53,18 @@ impl DataEngine {
         from: Format,
         to: Format,
     ) -> Result<OutputFileMetadata, MartiniError> {
-        let value = read_data(input, from)?;
+        let bytes = fs::read(input).map_err(MartiniError::Io)?;
+        self.convert_slice(&bytes, output, from, to)
+    }
+
+    pub fn convert_slice(
+        &self,
+        input_data: &[u8],
+        output: &Path,
+        from: Format,
+        to: Format,
+    ) -> Result<OutputFileMetadata, MartiniError> {
+        let value = read_data_from_slice(input_data, from)?;
         write_data(&value, output, to)?;
 
         let metadata = fs::metadata(output).map_err(MartiniError::Io)?;
@@ -67,31 +77,21 @@ impl DataEngine {
     }
 }
 
-fn detect_format(path: &Path) -> Result<Format, MartiniError> {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    Format::from_str(&ext).map_err(|_| MartiniError::InvalidInputData {
-        reason: format!("Unsupported data format extension: '{}'", ext),
-    })
-}
-
-fn read_data(path: &Path, format: Format) -> Result<Value, MartiniError> {
-    let file = fs::File::open(path).map_err(MartiniError::Io)?;
-
+fn read_data_from_slice(bytes: &[u8], format: Format) -> Result<Value, MartiniError> {
     match format {
-        Format::Json => serde_json::from_reader(file).map_err(|e| MartiniError::InvalidInputData {
+        Format::Json => serde_json::from_slice(bytes).map_err(|e| MartiniError::InvalidInputData {
             reason: format!("Failed to parse JSON: {}", e),
         }),
-        Format::Yaml => serde_yaml::from_reader(file).map_err(|e| MartiniError::InvalidInputData {
+        Format::Yaml => serde_yaml::from_slice(bytes).map_err(|e| MartiniError::InvalidInputData {
             reason: format!("Failed to parse YAML: {}", e),
         }),
         Format::Toml => {
-            let content = fs::read_to_string(path).map_err(MartiniError::Io)?;
+            let content =
+                std::str::from_utf8(bytes).map_err(|e| MartiniError::InvalidInputData {
+                    reason: format!("Input is not valid UTF-8: {}", e),
+                })?;
             let toml_val: toml::Value =
-                toml::from_str(&content).map_err(|e| MartiniError::InvalidInputData {
+                toml::from_str(content).map_err(|e| MartiniError::InvalidInputData {
                     reason: format!("Failed to parse TOML: {}", e),
                 })?;
             serde_json::to_value(toml_val).map_err(|e| MartiniError::InvalidInputData {
@@ -102,7 +102,7 @@ fn read_data(path: &Path, format: Format) -> Result<Value, MartiniError> {
             let delimiter = if format == Format::Tsv { b'\t' } else { b',' };
             let mut rdr = csv::ReaderBuilder::new()
                 .delimiter(delimiter)
-                .from_reader(file);
+                .from_reader(bytes);
 
             let headers = rdr
                 .headers()

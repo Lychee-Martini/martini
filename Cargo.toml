@@ -1,6 +1,6 @@
 [package]
 name = "martini-cli"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Lychee Martini <info@lycheemartini.com>"]
 description = "A modern, extensible CLI format converter built in Rust and optimized for Agent Skills."
@@ -39,7 +39,6 @@ image = { version = "0.25.10", default-features = false, features = [
 ico = "0.6.0"
 ravif = { version = "0.13.0", default-features = false }
 webp = "0.3.1"
-imgref = "1.12.3"
 pdfium-render = { version = "0.9.4", features = ["image_025"] }
 pdfium-auto = "0.3.1"
 
