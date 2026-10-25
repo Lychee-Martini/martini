@@ -2160,7 +2160,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "typst",
- "typst-kit",
  "typst-pdf",
  "webp",
  "zip 9.1.0",
@@ -4259,31 +4258,6 @@ dependencies = [
  "typst-timing",
  "typst-utils",
  "unicode-math-class",
-]
-
-[[package]]
-name = "typst-kit"
-version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27ee52e27dfab0da5ac3d19e7e43a21fbc7ff83af9301119468bae89fa857a8b"
-dependencies = [
- "dirs 6.0.0",
- "ecow",
- "fastrand",
- "flate2",
- "fontdb 0.23.0",
- "once_cell",
- "parking_lot",
- "rustc-hash",
- "serde",
- "serde_json",
- "tar",
- "typst-assets",
- "typst-library",
- "typst-syntax",
- "typst-timing",
- "typst-utils",
- "url",
 ]
 
 [[package]]

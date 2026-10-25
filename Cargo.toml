@@ -76,11 +76,6 @@ docx-rs = "0.4.22"
 pulldown-cmark = "0.13.5"
 typst = "0.15.1"
 typst-pdf = "0.15.1"
-typst-kit = { version = "0.15.1", default-features = false, features = [
-    "scan-fonts",
-    "embedded-fonts",
-    "system-files",
-] }
 fontdb = "0.24"
 
 
