@@ -1,3 +1,4 @@
+pub mod device;
 pub mod mask;
 pub mod models;
 pub mod pipeline;
