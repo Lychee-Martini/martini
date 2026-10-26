@@ -345,10 +345,7 @@ impl CandleInpainter {
     }
 
     #[cfg(not(feature = "erase"))]
-    pub fn load(
-        _paths: &ModelPaths,
-        preset: InpaintModelPreset,
-    ) -> Result<Self, MartiniError> {
+    pub fn load(_paths: &ModelPaths, preset: InpaintModelPreset) -> Result<Self, MartiniError> {
         Ok(Self { preset })
     }
 

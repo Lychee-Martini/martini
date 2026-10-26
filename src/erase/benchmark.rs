@@ -28,11 +28,8 @@ impl BenchmarkReport {
         } else {
             0.0
         };
-        let total_ms = localization_ms
-            + vae_encode_ms
-            + denoise_ms
-            + vae_decode_ms
-            + alpha_blend_ms;
+        let total_ms =
+            localization_ms + vae_encode_ms + denoise_ms + vae_decode_ms + alpha_blend_ms;
 
         Self {
             localization_ms,
@@ -55,8 +52,14 @@ impl BenchmarkReport {
         println!("+---------------------------+------------+");
         println!("| Stage                     | Time (ms)  |");
         println!("+---------------------------+------------+");
-        println!("| 1. CLIP Localization      | {:>6} ms  |", self.localization_ms);
-        println!("| 2. VAE Encoding           | {:>6} ms  |", self.vae_encode_ms);
+        println!(
+            "| 1. CLIP Localization      | {:>6} ms  |",
+            self.localization_ms
+        );
+        println!(
+            "| 2. VAE Encoding           | {:>6} ms  |",
+            self.vae_encode_ms
+        );
         println!(
             "| 3. UNet Denoise ({} st.)  | {:>6} ms  |",
             self.denoise_steps, self.denoise_ms
@@ -65,8 +68,14 @@ impl BenchmarkReport {
             "|    - Avg per step         | {:>6.1} ms  |",
             self.denoise_step_avg_ms
         );
-        println!("| 4. VAE Decoding           | {:>6} ms  |", self.vae_decode_ms);
-        println!("| 5. Alpha Blending         | {:>6} ms  |", self.alpha_blend_ms);
+        println!(
+            "| 4. VAE Decoding           | {:>6} ms  |",
+            self.vae_decode_ms
+        );
+        println!(
+            "| 5. Alpha Blending         | {:>6} ms  |",
+            self.alpha_blend_ms
+        );
         println!("+---------------------------+------------+");
         println!("| Total Latency             | {:>6} ms  |", self.total_ms);
         if let Some(vram) = self.peak_vram_mb {

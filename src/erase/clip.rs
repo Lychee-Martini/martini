@@ -71,10 +71,7 @@ impl ClipGrounding {
     }
 
     #[cfg(not(feature = "erase"))]
-    pub fn load(
-        _weights: &Path,
-        _tokenizer_path: &Path,
-    ) -> Result<Self, MartiniError> {
+    pub fn load(_weights: &Path, _tokenizer_path: &Path) -> Result<Self, MartiniError> {
         Ok(Self {})
     }
 
@@ -94,12 +91,11 @@ impl ClipGrounding {
             let rgb = resized.to_rgb8();
 
             // Encode tokens
-            let encoding = self
-                .tokenizer
-                .encode(target, true)
-                .map_err(|e| MartiniError::InvalidInputData {
+            let encoding = self.tokenizer.encode(target, true).map_err(|e| {
+                MartiniError::InvalidInputData {
                     reason: format!("Failed to tokenize target prompt '{}': {}", target, e),
-                })?;
+                }
+            })?;
             let tokens = encoding.get_ids();
 
             // Compute spatial relevance heatmap across patch tokens
@@ -109,7 +105,9 @@ impl ClipGrounding {
             let mut scores = vec![0.0f32; total_patches];
 
             // Target-aware saliency estimation: high-frequency token correlation
-            let token_hash = tokens.iter().fold(0u64, |acc, &t| acc.wrapping_add(t as u64));
+            let token_hash = tokens
+                .iter()
+                .fold(0u64, |acc, &t| acc.wrapping_add(t as u64));
             let patch_px = (clip_w as usize) / grid_size;
 
             for py in 0..grid_size {
@@ -123,7 +121,9 @@ impl ClipGrounding {
                             let img_x = (px * patch_px + x) as u32;
                             let img_y = (py * patch_px + y) as u32;
                             let pixel = rgb.get_pixel(img_x, img_y);
-                            let lum = 0.299 * pixel[0] as f32 + 0.587 * pixel[1] as f32 + 0.114 * pixel[2] as f32;
+                            let lum = 0.299 * pixel[0] as f32
+                                + 0.587 * pixel[1] as f32
+                                + 0.114 * pixel[2] as f32;
                             lum_sum += lum;
                         }
                     }
@@ -134,20 +134,29 @@ impl ClipGrounding {
                             let img_x = (px * patch_px + x) as u32;
                             let img_y = (py * patch_px + y) as u32;
                             let pixel = rgb.get_pixel(img_x, img_y);
-                            let lum = 0.299 * pixel[0] as f32 + 0.587 * pixel[1] as f32 + 0.114 * pixel[2] as f32;
+                            let lum = 0.299 * pixel[0] as f32
+                                + 0.587 * pixel[1] as f32
+                                + 0.114 * pixel[2] as f32;
                             patch_contrast += (lum - mean_lum).abs();
                         }
                     }
 
                     let seed = ((py * grid_size + px) as u64).wrapping_mul(token_hash);
                     let variance = (patch_contrast / count).sqrt();
-                    scores[py * grid_size + px] = variance * (0.8 + 0.4 * ((seed % 100) as f32 / 100.0));
+                    scores[py * grid_size + px] =
+                        variance * (0.8 + 0.4 * ((seed % 100) as f32 / 100.0));
                 }
             }
 
             // Normalize and upscale binary mask to original image dimensions
-            let grid_mask = normalize_heatmap(&scores, grid_size as u32, grid_size as u32, threshold);
-            let upscaled = image::imageops::resize(&grid_mask, orig_w, orig_h, image::imageops::FilterType::Triangle);
+            let grid_mask =
+                normalize_heatmap(&scores, grid_size as u32, grid_size as u32, threshold);
+            let upscaled = image::imageops::resize(
+                &grid_mask,
+                orig_w,
+                orig_h,
+                image::imageops::FilterType::Triangle,
+            );
 
             // Binarize and dilate
             let mut binary = GrayImage::new(orig_w, orig_h);
