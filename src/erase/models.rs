@@ -26,11 +26,27 @@ pub enum InpaintModelPreset {
 }
 
 impl InpaintModelPreset {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Sd15 => "sd-1.5",
+            Self::Lcm => "lcm",
+            Self::SdTurbo => "sd-turbo",
+        }
+    }
+
     pub fn default_steps(&self) -> usize {
         match self {
             Self::Sd15 => 20,
             Self::Lcm => 4,
             Self::SdTurbo => 1,
+        }
+    }
+
+    pub fn repo_id(&self) -> &'static str {
+        match self {
+            Self::Sd15 => "runwayml/stable-diffusion-inpainting",
+            Self::Lcm => "latent-consistency/lcm-sd-1.5",
+            Self::SdTurbo => "stabilityai/sd-turbo",
         }
     }
 }
@@ -66,22 +82,148 @@ impl ModelManager {
         Ok(Self { cache_dir })
     }
 
-    pub fn ensure_models(&self) -> Result<ModelPaths, MartiniError> {
-        fs::create_dir_all(&self.cache_dir).map_err(MartiniError::Io)?;
+    pub fn get_expected_paths(&self, preset: InpaintModelPreset) -> ModelPaths {
+        let clip_dir = self.cache_dir.join("clip");
+        let preset_dir = self.cache_dir.join(preset.as_str());
 
-        let clip_weights = self.cache_dir.join("clip_model.safetensors");
-        let tokenizer = self.cache_dir.join("tokenizer.json");
-        let unet_weights = self.cache_dir.join("unet.safetensors");
-        let vae_weights = self.cache_dir.join("vae.safetensors");
-        let text_encoder_weights = self.cache_dir.join("text_encoder.safetensors");
+        ModelPaths {
+            clip_weights: clip_dir.join("model.safetensors"),
+            tokenizer: clip_dir.join("tokenizer.json"),
+            unet_weights: preset_dir.join("unet.safetensors"),
+            vae_weights: preset_dir.join("vae.safetensors"),
+            text_encoder_weights: preset_dir.join("text_encoder.safetensors"),
+        }
+    }
 
-        Ok(ModelPaths {
-            clip_weights,
-            tokenizer,
-            unet_weights,
-            vae_weights,
-            text_encoder_weights,
-        })
+    pub fn ensure_models(&self, preset: InpaintModelPreset) -> Result<ModelPaths, MartiniError> {
+        let paths = self.get_expected_paths(preset);
+        let all_exist = paths.clip_weights.exists()
+            && paths.tokenizer.exists()
+            && paths.unet_weights.exists()
+            && paths.vae_weights.exists()
+            && paths.text_encoder_weights.exists();
+
+        if all_exist {
+            return Ok(paths);
+        }
+
+        #[cfg(feature = "erase")]
+        {
+            self.download_preset(preset)?;
+            Ok(paths)
+        }
+
+        #[cfg(not(feature = "erase"))]
+        {
+            Err(MartiniError::InvalidInputData {
+                reason: format!(
+                    "Model weights for '{}' are not cached locally and binary was compiled without 'erase' feature. \
+                    Use --fast for instant offline inpainting without model dependencies.",
+                    preset.as_str()
+                ),
+            })
+        }
+    }
+
+    pub fn download_preset(&self, preset: InpaintModelPreset) -> Result<(), MartiniError> {
+        let paths = self.get_expected_paths(preset);
+
+        if let Some(parent) = paths.clip_weights.parent() {
+            fs::create_dir_all(parent).map_err(MartiniError::Io)?;
+        }
+        if let Some(parent) = paths.unet_weights.parent() {
+            fs::create_dir_all(parent).map_err(MartiniError::Io)?;
+        }
+
+        #[cfg(feature = "erase")]
+        {
+            use indicatif::{ProgressBar, ProgressStyle};
+
+            println!(
+                "📥 Downloading inpainting weights for preset '{}'...",
+                preset.as_str()
+            );
+
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.green} [{elapsed_precise}] {msg}")
+                    .unwrap(),
+            );
+
+            let api = hf_hub::api::sync::ApiBuilder::new()
+                .with_cache_dir(self.cache_dir.clone())
+                .build()
+                .map_err(|e| MartiniError::InvalidInputData {
+                    reason: format!("Failed to initialize Hugging Face API client: {}", e),
+                })?;
+
+            // 1. Download CLIP localization weights
+            if !paths.clip_weights.exists() || !paths.tokenizer.exists() {
+                pb.set_message("Downloading CLIP visual grounding weights...");
+                let clip_repo = api.model("openai/clip-vit-base-patch32".to_string());
+                let downloaded_clip = clip_repo.get("model.safetensors").map_err(|e| {
+                    MartiniError::InvalidInputData {
+                        reason: format!(
+                            "Failed to download CLIP model: {}. Tip: Use --fast for model-free inpainting.",
+                            e
+                        ),
+                    }
+                })?;
+                let downloaded_tok = clip_repo.get("tokenizer.json").map_err(|e| {
+                    MartiniError::InvalidInputData {
+                        reason: format!("Failed to download CLIP tokenizer: {}", e),
+                    }
+                })?;
+                fs::copy(&downloaded_clip, &paths.clip_weights).map_err(MartiniError::Io)?;
+                fs::copy(&downloaded_tok, &paths.tokenizer).map_err(MartiniError::Io)?;
+            }
+
+            // 2. Download Inpainting UNet, VAE, and Text Encoder
+            let model_repo = api.model(preset.repo_id().to_string());
+
+            if !paths.unet_weights.exists() {
+                pb.set_message(format!(
+                    "Downloading UNet weights from {}...",
+                    preset.repo_id()
+                ));
+                let downloaded = model_repo
+                    .get("unet/diffusion_pytorch_model.safetensors")
+                    .map_err(|e| MartiniError::InvalidInputData {
+                        reason: format!("Failed to download UNet weights: {}", e),
+                    })?;
+                fs::copy(&downloaded, &paths.unet_weights).map_err(MartiniError::Io)?;
+            }
+
+            if !paths.vae_weights.exists() {
+                pb.set_message("Downloading VAE weights...");
+                let downloaded = model_repo
+                    .get("vae/diffusion_pytorch_model.safetensors")
+                    .map_err(|e| MartiniError::InvalidInputData {
+                        reason: format!("Failed to download VAE weights: {}", e),
+                    })?;
+                fs::copy(&downloaded, &paths.vae_weights).map_err(MartiniError::Io)?;
+            }
+
+            if !paths.text_encoder_weights.exists() {
+                pb.set_message("Downloading Text Encoder weights...");
+                let downloaded = model_repo
+                    .get("text_encoder/model.safetensors")
+                    .map_err(|e| MartiniError::InvalidInputData {
+                        reason: format!("Failed to download text encoder weights: {}", e),
+                    })?;
+                fs::copy(&downloaded, &paths.text_encoder_weights).map_err(MartiniError::Io)?;
+            }
+
+            pb.finish_with_message("✨ Model weights downloaded successfully!");
+        }
+
+        #[cfg(not(feature = "erase"))]
+        {
+            let _ = paths;
+        }
+
+        Ok(())
     }
 
     pub fn verify_checksum(path: &Path, expected_sha256: &str) -> Result<bool, MartiniError> {

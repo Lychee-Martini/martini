@@ -180,7 +180,7 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
 
     // 6. Inpainting execution
     let model_mgr = ModelManager::new(args.model_dir.as_deref())?;
-    let model_paths = model_mgr.ensure_models()?;
+    let model_paths = model_mgr.ensure_models(args.model)?;
     let pipeline = InpaintPipeline::load(&model_paths)?;
 
     let result_img = if let Some(bbox) = compute_bounding_box(&mask, 16) {
