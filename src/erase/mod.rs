@@ -3,7 +3,7 @@ pub mod models;
 pub mod pipeline;
 
 use crate::erase::mask::{compute_bounding_box, dilate_mask};
-use crate::erase::models::ModelManager;
+use crate::erase::models::{InpaintModelPreset, ModelManager};
 use crate::erase::pipeline::InpaintPipeline;
 use crate::error::MartiniError;
 use clap::Args;
@@ -24,9 +24,33 @@ pub struct EraseArgs {
     #[arg(short = 't', long = "target")]
     pub target: Option<String>,
 
+    /// English description of the object to generate in place of the target
+    #[arg(short = 'r', long = "replace")]
+    pub replace: Option<String>,
+
     /// Path to an optional pre-existing binary mask image
     #[arg(long = "mask")]
     pub mask: Option<PathBuf>,
+
+    /// Inpainting model preset to use
+    #[arg(long = "model", default_value = "sd-1.5")]
+    pub model: InpaintModelPreset,
+
+    /// Pre-download model weights for the selected preset (or 'all') and exit
+    #[arg(long = "download-models", num_args = 0..=1)]
+    pub download_models: Option<Option<String>>,
+
+    /// Instrument and print stage-by-stage latency and peak memory
+    #[arg(long)]
+    pub benchmark: bool,
+
+    /// Use classical Fast Marching inpainting (instant, no model download needed)
+    #[arg(long)]
+    pub fast: bool,
+
+    /// Compute device target: auto, cuda, or cpu
+    #[arg(long = "device", default_value = "auto")]
+    pub device: String,
 
     /// Number of diffusion inference steps (default: 20)
     #[arg(long, default_value_t = 20)]

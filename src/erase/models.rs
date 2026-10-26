@@ -4,12 +4,44 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    clap::ValueEnum,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub enum InpaintModelPreset {
+    #[default]
+    #[value(name = "sd-1.5")]
+    Sd15,
+    #[value(name = "lcm")]
+    Lcm,
+    #[value(name = "sd-turbo")]
+    SdTurbo,
+}
+
+impl InpaintModelPreset {
+    pub fn default_steps(&self) -> usize {
+        match self {
+            Self::Sd15 => 20,
+            Self::Lcm => 4,
+            Self::SdTurbo => 1,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ModelPaths {
     pub clip_weights: PathBuf,
     pub tokenizer: PathBuf,
     pub unet_weights: PathBuf,
     pub vae_weights: PathBuf,
+    pub text_encoder_weights: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -41,12 +73,14 @@ impl ModelManager {
         let tokenizer = self.cache_dir.join("tokenizer.json");
         let unet_weights = self.cache_dir.join("unet.safetensors");
         let vae_weights = self.cache_dir.join("vae.safetensors");
+        let text_encoder_weights = self.cache_dir.join("text_encoder.safetensors");
 
         Ok(ModelPaths {
             clip_weights,
             tokenizer,
             unet_weights,
             vae_weights,
+            text_encoder_weights,
         })
     }
 
