@@ -63,6 +63,7 @@ fn test_inpaint_replaces_masked_pixels_with_background() {
         tokenizer: std::path::PathBuf::new(),
         unet_weights: std::path::PathBuf::new(),
         vae_weights: std::path::PathBuf::new(),
+        text_encoder_weights: std::path::PathBuf::new(),
     };
     let pipeline = martini::erase::pipeline::InpaintPipeline::load(&paths).unwrap();
     let inpainted = pipeline.inpaint(&dyn_img, &mask, 15).unwrap();

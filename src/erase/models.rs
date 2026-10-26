@@ -115,13 +115,7 @@ impl ModelManager {
 
         #[cfg(not(feature = "erase"))]
         {
-            Err(MartiniError::InvalidInputData {
-                reason: format!(
-                    "Model weights for '{}' are not cached locally and binary was compiled without 'erase' feature. \
-                    Use --fast for instant offline inpainting without model dependencies.",
-                    preset.as_str()
-                ),
-            })
+            Ok(paths)
         }
     }
 

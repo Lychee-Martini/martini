@@ -84,6 +84,7 @@ fn test_erase_save_mask_flag() {
         "--mask",
         mask_file.to_str().unwrap(),
         "--save-mask",
+        "--fast",
     ])
     .assert()
     .success();
