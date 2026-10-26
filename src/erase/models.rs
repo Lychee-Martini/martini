@@ -107,13 +107,13 @@ impl ModelManager {
             return Ok(paths);
         }
 
-        #[cfg(feature = "erase")]
+        #[cfg(feature = "nn-cpu")]
         {
             self.download_preset(preset)?;
             Ok(paths)
         }
 
-        #[cfg(not(feature = "erase"))]
+        #[cfg(not(feature = "nn-cpu"))]
         {
             Ok(paths)
         }
@@ -129,7 +129,7 @@ impl ModelManager {
             fs::create_dir_all(parent).map_err(MartiniError::Io)?;
         }
 
-        #[cfg(feature = "erase")]
+        #[cfg(feature = "nn-cpu")]
         {
             use indicatif::{ProgressBar, ProgressStyle};
 
@@ -212,7 +212,7 @@ impl ModelManager {
             pb.finish_with_message("✨ Model weights downloaded successfully!");
         }
 
-        #[cfg(not(feature = "erase"))]
+        #[cfg(not(feature = "nn-cpu"))]
         {
             let _ = paths;
         }

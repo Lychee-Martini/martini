@@ -23,19 +23,22 @@ path = "src/main.rs"
 
 [features]
 default = []
-erase = [
+nn-cpu = [
     "dep:candle-core",
     "dep:candle-transformers",
     "dep:candle-nn",
     "dep:tokenizers",
     "dep:hf-hub",
 ]
+cpu-nn = ["nn-cpu"]
+erase = ["nn-cpu"]
 cuda = [
-    "erase",
+    "nn-cpu",
     "candle-core/cuda",
     "candle-transformers/cuda",
     "candle-nn/cuda",
 ]
+nn-cuda = ["cuda"]
 
 [dependencies]
 # CLI Parsing

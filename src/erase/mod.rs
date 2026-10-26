@@ -146,9 +146,9 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
 
     // 3. Resolve device & benchmark instrumentation
     let _dev_target = resolve_device_target(&args.device)?;
-    #[cfg(feature = "erase")]
+    #[cfg(feature = "nn-cpu")]
     let (candle_dev, dev_name) = crate::erase::device::select_candle_device(_dev_target);
-    #[cfg(not(feature = "erase"))]
+    #[cfg(not(feature = "nn-cpu"))]
     let dev_name = "CPU".to_string();
 
     let mut benchmark_report = if args.benchmark {
@@ -181,13 +181,13 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
             mask::detect_text_mask(&img, args.threshold)
         } else {
             let model_paths = model_mgr.ensure_models(args.model)?;
-            #[cfg(feature = "erase")]
+            #[cfg(feature = "nn-cpu")]
             let clip_grounding = ClipGrounding::load(
                 &model_paths.clip_weights,
                 &model_paths.tokenizer,
                 &candle_dev,
             )?;
-            #[cfg(not(feature = "erase"))]
+            #[cfg(not(feature = "nn-cpu"))]
             let clip_grounding =
                 ClipGrounding::load(&model_paths.clip_weights, &model_paths.tokenizer)?;
 
@@ -233,9 +233,9 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
             classical.inpaint(&crop_patch, &crop_mask, args.steps)?
         } else {
             let model_paths = model_mgr.ensure_models(args.model)?;
-            #[cfg(feature = "erase")]
+            #[cfg(feature = "nn-cpu")]
             let inpainter = CandleInpainter::load(&model_paths, args.model, &candle_dev)?;
-            #[cfg(not(feature = "erase"))]
+            #[cfg(not(feature = "nn-cpu"))]
             let inpainter = CandleInpainter::load(&model_paths, args.model)?;
 
             inpainter.inpaint(

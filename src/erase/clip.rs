@@ -3,7 +3,7 @@ use crate::error::MartiniError;
 use image::{DynamicImage, GrayImage, Luma};
 use std::path::Path;
 
-#[cfg(feature = "erase")]
+#[cfg(feature = "nn-cpu")]
 use candle_core::Device;
 
 /// Scales raw 2D spatial heatmap scores to [0.0, 1.0] and thresholds into a binary GrayImage
@@ -45,14 +45,14 @@ pub fn normalize_heatmap(scores: &[f32], width: u32, height: u32, threshold: f32
 }
 
 pub struct ClipGrounding {
-    #[cfg(feature = "erase")]
+    #[cfg(feature = "nn-cpu")]
     pub device: Device,
-    #[cfg(feature = "erase")]
+    #[cfg(feature = "nn-cpu")]
     pub tokenizer: tokenizers::Tokenizer,
 }
 
 impl ClipGrounding {
-    #[cfg(feature = "erase")]
+    #[cfg(feature = "nn-cpu")]
     pub fn load(
         _weights: &Path,
         tokenizer_path: &Path,
@@ -70,7 +70,7 @@ impl ClipGrounding {
         })
     }
 
-    #[cfg(not(feature = "erase"))]
+    #[cfg(not(feature = "nn-cpu"))]
     pub fn load(_weights: &Path, _tokenizer_path: &Path) -> Result<Self, MartiniError> {
         Ok(Self {})
     }
@@ -81,7 +81,7 @@ impl ClipGrounding {
         target: &str,
         threshold: f32,
     ) -> Result<GrayImage, MartiniError> {
-        #[cfg(feature = "erase")]
+        #[cfg(feature = "nn-cpu")]
         {
             let (orig_w, orig_h) = (img.width(), img.height());
             // Standard CLIP ViT resolution is 224x224 (7x7 or 14x14 grid of patches)
@@ -173,7 +173,7 @@ impl ClipGrounding {
             Ok(dilate_mask(&binary, 6))
         }
 
-        #[cfg(not(feature = "erase"))]
+        #[cfg(not(feature = "nn-cpu"))]
         {
             let _ = target;
             let detected = crate::erase::mask::detect_text_mask(img, threshold);

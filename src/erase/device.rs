@@ -1,6 +1,6 @@
 use crate::error::MartiniError;
 
-#[cfg(feature = "erase")]
+#[cfg(feature = "nn-cpu")]
 use candle_core::Device;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +24,7 @@ pub fn resolve_device_target(target: &str) -> Result<DeviceTarget, MartiniError>
     }
 }
 
-#[cfg(feature = "erase")]
+#[cfg(feature = "nn-cpu")]
 pub fn select_candle_device(target: DeviceTarget) -> (Device, String) {
     match target {
         DeviceTarget::Cpu => (Device::Cpu, "CPU".to_string()),

@@ -3,10 +3,10 @@ use crate::erase::mask::feather_mask;
 use crate::erase::models::{InpaintModelPreset, ModelPaths};
 use crate::error::MartiniError;
 use image::{DynamicImage, GrayImage, Rgba};
-#[cfg(feature = "erase")]
+#[cfg(feature = "nn-cpu")]
 use std::time::Instant;
 
-#[cfg(feature = "erase")]
+#[cfg(feature = "nn-cpu")]
 use candle_core::Device;
 
 /// Classical heuristic inpainter using Telea Fast Marching propagation and Laplacian harmonic smoothing
@@ -318,14 +318,14 @@ impl InpaintPipeline {
 /// Neural diffusion inpainter using Hugging Face Candle
 pub struct CandleInpainter {
     pub preset: InpaintModelPreset,
-    #[cfg(feature = "erase")]
+    #[cfg(feature = "nn-cpu")]
     pub device: Device,
-    #[cfg(feature = "erase")]
+    #[cfg(feature = "nn-cpu")]
     pub tokenizer: tokenizers::Tokenizer,
 }
 
 impl CandleInpainter {
-    #[cfg(feature = "erase")]
+    #[cfg(feature = "nn-cpu")]
     pub fn load(
         paths: &ModelPaths,
         preset: InpaintModelPreset,
@@ -344,7 +344,7 @@ impl CandleInpainter {
         })
     }
 
-    #[cfg(not(feature = "erase"))]
+    #[cfg(not(feature = "nn-cpu"))]
     pub fn load(_paths: &ModelPaths, preset: InpaintModelPreset) -> Result<Self, MartiniError> {
         Ok(Self { preset })
     }
@@ -357,7 +357,7 @@ impl CandleInpainter {
         steps: usize,
         reporter: Option<&mut BenchmarkReport>,
     ) -> Result<DynamicImage, MartiniError> {
-        #[cfg(feature = "erase")]
+        #[cfg(feature = "nn-cpu")]
         {
             let num_steps = if steps == 0 {
                 self.preset.default_steps()
@@ -397,7 +397,7 @@ impl CandleInpainter {
             Ok(classical_base)
         }
 
-        #[cfg(not(feature = "erase"))]
+        #[cfg(not(feature = "nn-cpu"))]
         {
             let _ = prompt;
             let _ = reporter;
