@@ -2885,6 +2885,7 @@ dependencies = [
  "candle-transformers",
  "clap",
  "csv",
+ "cudarc",
  "dirs 6.0.0",
  "docx-rs",
  "flate2",

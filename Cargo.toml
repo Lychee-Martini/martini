@@ -34,6 +34,7 @@ cpu-nn = ["nn-cpu"]
 erase = ["nn-cpu"]
 cuda = [
     "nn-cpu",
+    "dep:cudarc",
     "candle-core/cuda",
     "candle-transformers/cuda",
     "candle-nn/cuda",
@@ -102,6 +103,7 @@ candle-transformers = { version = "0.8.2", optional = true }
 candle-nn = { version = "0.8.2", optional = true }
 tokenizers = { version = "0.21.0", default-features = false, features = ["fancy-regex"], optional = true }
 hf-hub = { version = "0.4.1", optional = true }
+cudarc = { version = "0.13.9", default-features = false, features = ["cuda-12080"], optional = true }
 
 
 [dev-dependencies]
