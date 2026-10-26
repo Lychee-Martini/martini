@@ -20,8 +20,8 @@ use std::time::Instant;
 #[derive(Debug, Clone, Args)]
 pub struct EraseArgs {
     /// Path to the source image to edit
-    #[arg(value_name = "INPUT")]
-    pub input: PathBuf,
+    #[arg(value_name = "INPUT", required_unless_present = "download_models")]
+    pub input: Option<PathBuf>,
 
     /// Path to save the edited image (defaults to <INPUT_STEM>_erased.<EXT>)
     #[arg(short = 'o', long = "output", value_name = "OUTPUT")]
@@ -86,21 +86,44 @@ pub struct EraseArgs {
 
 pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
     // 0. Handle model pre-download if requested
-    if let Some(ref download_arg) = args.download_models {
+    if let Some(ref download_opt) = args.download_models {
         let model_mgr = ModelManager::new(args.model_dir.as_deref())?;
-        let target_preset = match download_arg.as_deref() {
-            Some("lcm") => InpaintModelPreset::Lcm,
-            Some("sd-turbo") => InpaintModelPreset::SdTurbo,
-            _ => args.model,
-        };
-        println!(
-            "🚀 Pre-downloading weights for preset '{}'...",
-            target_preset.as_str()
-        );
-        model_mgr.download_preset(target_preset)?;
+        let download_val = download_opt.as_deref();
+        if download_val == Some("all") {
+            for preset in [
+                InpaintModelPreset::Sd15,
+                InpaintModelPreset::Lcm,
+                InpaintModelPreset::SdTurbo,
+            ] {
+                println!(
+                    "🚀 Pre-downloading weights for preset '{}'...",
+                    preset.as_str()
+                );
+                model_mgr.download_preset(preset)?;
+            }
+        } else {
+            let target_preset = match download_val {
+                Some("lcm") => InpaintModelPreset::Lcm,
+                Some("sd-turbo") => InpaintModelPreset::SdTurbo,
+                Some("sd-1.5") => InpaintModelPreset::Sd15,
+                _ => args.model,
+            };
+            println!(
+                "🚀 Pre-downloading weights for preset '{}'...",
+                target_preset.as_str()
+            );
+            model_mgr.download_preset(target_preset)?;
+        }
         println!("✅ Download complete.");
         return Ok(());
     }
+
+    let input_path = args
+        .input
+        .as_ref()
+        .ok_or_else(|| MartiniError::InvalidInputData {
+            reason: "Input file must be provided unless --download-models is used".to_string(),
+        })?;
 
     if args.target.is_none() && args.mask.is_none() {
         return Err(MartiniError::InvalidInputData {
@@ -108,9 +131,9 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
         });
     }
 
-    if !args.input.exists() {
+    if !input_path.exists() {
         return Err(MartiniError::InputFileNotFound {
-            path: args.input.to_string_lossy().to_string(),
+            path: input_path.to_string_lossy().to_string(),
         });
     }
 
@@ -118,26 +141,24 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
     let output_path = match &args.output {
         Some(p) => p.clone(),
         None => {
-            let stem = args
-                .input
+            let stem = input_path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("image");
-            let ext = args
-                .input
+            let ext = input_path
                 .extension()
                 .and_then(|e| e.to_str())
                 .unwrap_or("png");
-            let parent = args.input.parent().unwrap_or_else(|| Path::new("."));
+            let parent = input_path.parent().unwrap_or_else(|| Path::new("."));
             parent.join(format!("{}_erased.{}", stem, ext))
         }
     };
 
     // 2. Load input image
-    let img = image::open(&args.input).map_err(|e| MartiniError::InvalidInputData {
+    let img = image::open(input_path).map_err(|e| MartiniError::InvalidInputData {
         reason: format!(
             "Failed to read input image '{}': {}",
-            args.input.display(),
+            input_path.display(),
             e
         ),
     })?;
@@ -210,12 +231,11 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
     // 6. Save intermediate mask if requested
     if args.save_mask {
         let mask_output_path = {
-            let stem = args
-                .input
+            let stem = input_path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("image");
-            let parent = args.input.parent().unwrap_or_else(|| Path::new("."));
+            let parent = input_path.parent().unwrap_or_else(|| Path::new("."));
             parent.join(format!("{}_mask.png", stem))
         };
         mask.save(&mask_output_path)
@@ -277,7 +297,7 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
 
     if args.json {
         let json_meta = serde_json::json!({
-            "input": args.input.to_string_lossy(),
+            "input": input_path.to_string_lossy(),
             "output": output_path.to_string_lossy(),
             "target": args.target,
             "replace": args.replace,

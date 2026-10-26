@@ -31,3 +31,10 @@ fn test_cli_parse_replace_and_model_flags() {
     assert!(args.erase.fast);
     assert_eq!(args.erase.device, "cuda");
 }
+
+#[test]
+fn test_cli_parse_download_models_without_input() {
+    let args = TestCli::parse_from(["test", "--download-models", "sd-1.5"]);
+    assert_eq!(args.erase.download_models, Some(Some("sd-1.5".to_string())));
+    assert_eq!(args.erase.input, None);
+}

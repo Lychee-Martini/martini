@@ -44,8 +44,8 @@ impl InpaintModelPreset {
 
     pub fn repo_id(&self) -> &'static str {
         match self {
-            Self::Sd15 => "runwayml/stable-diffusion-inpainting",
-            Self::Lcm => "latent-consistency/lcm-sd-1.5",
+            Self::Sd15 => "stable-diffusion-v1-5/stable-diffusion-inpainting",
+            Self::Lcm => "SimianLuo/LCM_Dreamshaper_v7",
             Self::SdTurbo => "stabilityai/sd-turbo",
         }
     }
@@ -155,7 +155,11 @@ impl ModelManager {
             // 1. Download CLIP localization weights
             if !paths.clip_weights.exists() || !paths.tokenizer.exists() {
                 pb.set_message("Downloading CLIP visual grounding weights...");
-                let clip_repo = api.model("openai/clip-vit-base-patch32".to_string());
+                let clip_repo = api.repo(hf_hub::Repo::with_revision(
+                    "openai/clip-vit-base-patch32".to_string(),
+                    hf_hub::RepoType::Model,
+                    "b33cedfd0df4e43b8238760678fcc89e1a0d38b3".to_string(),
+                ));
                 let downloaded_clip = clip_repo.get("model.safetensors").map_err(|e| {
                     MartiniError::InvalidInputData {
                         reason: format!(
@@ -182,7 +186,8 @@ impl ModelManager {
                     preset.repo_id()
                 ));
                 let downloaded = model_repo
-                    .get("unet/diffusion_pytorch_model.safetensors")
+                    .get("unet/diffusion_pytorch_model.fp16.safetensors")
+                    .or_else(|_| model_repo.get("unet/diffusion_pytorch_model.safetensors"))
                     .map_err(|e| MartiniError::InvalidInputData {
                         reason: format!("Failed to download UNet weights: {}", e),
                     })?;
@@ -192,7 +197,8 @@ impl ModelManager {
             if !paths.vae_weights.exists() {
                 pb.set_message("Downloading VAE weights...");
                 let downloaded = model_repo
-                    .get("vae/diffusion_pytorch_model.safetensors")
+                    .get("vae/diffusion_pytorch_model.fp16.safetensors")
+                    .or_else(|_| model_repo.get("vae/diffusion_pytorch_model.safetensors"))
                     .map_err(|e| MartiniError::InvalidInputData {
                         reason: format!("Failed to download VAE weights: {}", e),
                     })?;
@@ -202,7 +208,8 @@ impl ModelManager {
             if !paths.text_encoder_weights.exists() {
                 pb.set_message("Downloading Text Encoder weights...");
                 let downloaded = model_repo
-                    .get("text_encoder/model.safetensors")
+                    .get("text_encoder/model.fp16.safetensors")
+                    .or_else(|_| model_repo.get("text_encoder/model.safetensors"))
                     .map_err(|e| MartiniError::InvalidInputData {
                         reason: format!("Failed to download text encoder weights: {}", e),
                     })?;
