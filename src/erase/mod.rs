@@ -1,4 +1,5 @@
 pub mod benchmark;
+pub mod clip;
 pub mod device;
 pub mod mask;
 pub mod models;
