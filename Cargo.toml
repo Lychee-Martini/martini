@@ -21,6 +21,26 @@ path = "src/lib.rs"
 name = "martini"
 path = "src/main.rs"
 
+[features]
+default = []
+nn-cpu = [
+    "dep:candle-core",
+    "dep:candle-transformers",
+    "dep:candle-nn",
+    "dep:tokenizers",
+    "dep:hf-hub",
+]
+cpu-nn = ["nn-cpu"]
+erase = ["nn-cpu"]
+cuda = [
+    "nn-cpu",
+    "dep:cudarc",
+    "candle-core/cuda",
+    "candle-transformers/cuda",
+    "candle-nn/cuda",
+]
+nn-cuda = ["cuda"]
+
 [dependencies]
 # CLI Parsing
 clap = { version = "4.6.7", features = ["derive", "env"] }
@@ -76,6 +96,14 @@ pulldown-cmark = "0.13.5"
 typst = "0.15.1"
 typst-pdf = "0.15.1"
 fontdb = "0.24"
+
+# Candle & Neural Inpainting (optional)
+candle-core = { version = "0.8.2", optional = true }
+candle-transformers = { version = "0.8.2", optional = true }
+candle-nn = { version = "0.8.2", optional = true }
+tokenizers = { version = "0.21.0", default-features = false, features = ["fancy-regex"], optional = true }
+hf-hub = { version = "0.4.1", optional = true }
+cudarc = { version = "0.13.9", default-features = false, features = ["cuda-12080"], optional = true }
 
 
 [dev-dependencies]

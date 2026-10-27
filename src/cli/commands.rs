@@ -208,6 +208,15 @@ pub enum Commands {
     Erase(crate::erase::EraseArgs),
 }
 
+impl Commands {
+    pub fn preset_name(&self) -> Option<&str> {
+        match self {
+            Commands::Convert { preset, .. } | Commands::Watch { preset, .. } => preset.as_deref(),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub enum PresetAction {
     /// List all available presets

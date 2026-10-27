@@ -5,11 +5,10 @@ pub mod error;
 pub mod preset;
 pub mod watcher;
 
-pub use converter::batch::{
-    BatchConvertOptions, BatchResult, ProgressTracker, TaskResult, batch_convert,
-};
+pub use converter::batch::{BatchConvertOptions, BatchResult, TaskResult, batch_convert};
 pub use converter::{
     ConversionResult, ConvertOptions, Format, FormatCapability, OutputFileMetadata,
     all_capabilities, convert,
 };
 pub use error::MartiniError;
+pub use preset::Preset;

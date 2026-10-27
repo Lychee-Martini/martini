@@ -195,7 +195,150 @@ impl FormatCapability {
 }
 
 pub fn all_capabilities() -> Vec<FormatCapability> {
-    engine::EngineRegistry::default().all_capabilities()
+    let img_from = "svg, png, jpg, jpeg, webp, avif, bmp, tiff, qoi";
+    let batch_base = &[
+        ("overwrite", "boolean (default false)"),
+        ("delete_original", "boolean (default false)"),
+        ("recursive", "boolean (default false)"),
+        ("workers", "integer (optional)"),
+    ];
+
+    vec![
+        FormatCapability::new(
+            img_from,
+            "favicon",
+            "Convert an SVG or raster image to a Chrome favicon (.ico or full favicon package)",
+            &[(
+                "package",
+                "boolean (generates a package of optimized PNGs, manifest, and HTML copy-paste snippets alongside the .ico file)",
+            )],
+        ),
+        FormatCapability::new(img_from, "png", "Convert images to PNG format", batch_base),
+        FormatCapability::new(
+            img_from,
+            "jpg",
+            "Convert images to JPEG format",
+            &[
+                ("quality", "integer (1-100, default 80)"),
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+                ("recursive", "boolean (default false)"),
+                ("workers", "integer (optional)"),
+            ],
+        ),
+        FormatCapability::new(
+            img_from,
+            "webp",
+            "Convert images to WebP format",
+            &[
+                ("quality", "integer (1-100, default 80)"),
+                ("lossless", "boolean (default false)"),
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+                ("recursive", "boolean (default false)"),
+                ("workers", "integer (optional)"),
+            ],
+        ),
+        FormatCapability::new(
+            img_from,
+            "avif",
+            "Convert images to AVIF format",
+            &[
+                ("quality", "integer (1-100, default 80)"),
+                ("lossless", "boolean (default false)"),
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+                ("recursive", "boolean (default false)"),
+                ("workers", "integer (optional)"),
+            ],
+        ),
+        FormatCapability::new(
+            img_from,
+            "both",
+            "Convert images to both WebP and AVIF formats",
+            &[
+                ("quality", "integer (1-100, default 80)"),
+                ("lossless", "boolean (default false)"),
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+                ("recursive", "boolean (default false)"),
+                ("workers", "integer (optional)"),
+            ],
+        ),
+        FormatCapability::new(img_from, "bmp", "Convert images to BMP format", batch_base),
+        FormatCapability::new(
+            img_from,
+            "tiff",
+            "Convert images to TIFF format",
+            batch_base,
+        ),
+        FormatCapability::new(img_from, "qoi", "Convert images to QOI format", batch_base),
+        FormatCapability::new(
+            "pdf",
+            "png, jpg, jpeg, webp, avif",
+            "Convert PDF pages to images",
+            &[
+                (
+                    "pages",
+                    "string (comma-separated page numbers or ranges, e.g. '1,3-5')",
+                ),
+                ("dpi", "integer (rendering DPI, default 150)"),
+                ("quality", "integer (1-100, default 80)"),
+                ("lossless", "boolean (default false)"),
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+            ],
+        ),
+        FormatCapability::new(
+            "md",
+            "docx",
+            "Convert Markdown documents to Microsoft Word (DOCX) files",
+            &[("overwrite", "boolean (default false)")],
+        ),
+        FormatCapability::new(
+            "md",
+            "pdf",
+            "Convert Markdown documents to PDF files with Pure Rust engine",
+            &[
+                (
+                    "theme",
+                    "string ('github', 'academic', 'modern', 'minimal', default 'github')",
+                ),
+                (
+                    "paper_size",
+                    "string ('a4', 'letter', 'a3', 'a5', default 'a4')",
+                ),
+                ("margin", "string (e.g. '20mm', '1in', default '20mm')"),
+                ("font_family", "string (custom font family name)"),
+                ("header", "string (custom header text)"),
+                ("footer", "string (custom footer text)"),
+                ("no_page_numbers", "boolean (default false)"),
+                (
+                    "toc",
+                    "boolean (automatically generate table of contents, default false)",
+                ),
+                ("overwrite", "boolean (default false)"),
+            ],
+        ),
+        FormatCapability::new(
+            "json, yaml, toml, csv, tsv",
+            "json, yaml, toml, csv, tsv",
+            "Convert structured data between JSON, YAML, TOML, CSV, and TSV formats",
+            &[
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+            ],
+        ),
+        FormatCapability::new(
+            "zip, tar, gz, tar.gz",
+            "zip, tar, gz, tar.gz",
+            "Convert compressed archives between ZIP, TAR, and TAR.GZ formats",
+            &[
+                ("overwrite", "boolean (default false)"),
+                ("delete_original", "boolean (default false)"),
+            ],
+        ),
+    ]
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -223,7 +366,7 @@ pub fn convert(
             from: from.to_string(),
             to: to.to_string(),
         })
-    } else if engine::FormatEngine::can_convert(&engine::data::DataEngine, from, to) {
+    } else if engine::data::DataEngine::can_convert(from, to) {
         let meta =
             engine::data::DataEngine.convert_slice(input_data, &options.output_path, from, to)?;
         Ok(ConversionResult {
@@ -231,7 +374,7 @@ pub fn convert(
             to,
             output_files: vec![meta],
         })
-    } else if engine::FormatEngine::can_convert(&engine::archive::ArchiveEngine, from, to) {
+    } else if engine::archive::ArchiveEngine::can_convert(from, to) {
         let (input_path, _temp_file) = if options.input_path.exists() {
             (options.input_path.clone(), None)
         } else {

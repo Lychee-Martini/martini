@@ -1,33 +1,8 @@
-use crate::converter::batch::{ProgressTracker, TaskResult};
-use indicatif::ProgressBar;
+use crate::converter::batch::TaskResult;
 use std::path::Path;
 
-pub struct CliProgressTracker {
-    pub pb: ProgressBar,
-}
-
-impl ProgressTracker for CliProgressTracker {
-    fn set_message(&self, msg: &str) {
-        self.pb.set_message(msg.to_string());
-    }
-
-    fn inc(&self, delta: u64) {
-        self.pb.inc(delta);
-    }
-}
-
 pub fn format_size(size_bytes: u64) -> String {
-    if size_bytes == 0 {
-        return "0 B".to_string();
-    }
-    let size_name = ["B", "KB", "MB", "GB", "TB"];
-    let i = (size_bytes as f64).log(1024.0).floor() as usize;
-    if i >= size_name.len() {
-        return format!("{} TB", (size_bytes as f64 / 1024.0f64.powi(4)));
-    }
-    let p = 1024.0f64.powi(i as i32);
-    let s = (size_bytes as f64 / p * 100.0).round() / 100.0;
-    format!("{} {}", s, size_name[i])
+    indicatif::HumanBytes(size_bytes).to_string()
 }
 
 pub fn truncate_str(s: &str, max_len: usize) -> String {
@@ -154,7 +129,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_format_size() {
-        assert_eq!(format_size(1024), "1 KB");
+        assert_eq!(format_size(1024), "1.00 KiB");
         assert_eq!(format_size(0), "0 B");
     }
 

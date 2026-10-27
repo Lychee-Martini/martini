@@ -1,6 +1,5 @@
 pub mod debouncer;
 
-use crate::converter::engine::EngineRegistry;
 use crate::converter::{ConvertOptions, Format};
 use crate::error::MartiniError;
 use debouncer::DebounceQueue;
@@ -8,7 +7,6 @@ use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
 
@@ -33,12 +31,11 @@ pub struct WatchRule {
 
 pub struct DirectoryWatcher {
     pub rule: WatchRule,
-    registry: Arc<EngineRegistry>,
 }
 
 impl DirectoryWatcher {
-    pub fn new(rule: WatchRule, registry: Arc<EngineRegistry>) -> Self {
-        Self { rule, registry }
+    pub fn new(rule: WatchRule) -> Self {
+        Self { rule }
     }
 
     pub fn run(&self, shutdown_signal: Receiver<()>) -> Result<(), MartiniError> {
@@ -173,12 +170,6 @@ impl DirectoryWatcher {
             Some(f) => f,
             None => return Ok(()),
         };
-
-        let engine = match self.registry.find_engine(from_format, to_format) {
-            Some(e) => e,
-            None => return Ok(()),
-        };
-
         // Determine destination file path
         let rel_path = input_path
             .strip_prefix(canonical_input)
@@ -197,7 +188,8 @@ impl DirectoryWatcher {
             ..Default::default()
         };
 
-        engine.convert(input_path, &out_file, &opt)?;
+        let input_bytes = fs::read(input_path).map_err(MartiniError::Io)?;
+        crate::converter::convert(from_format, to_format, &input_bytes, &opt)?;
 
         // Perform original action
         match &self.rule.original_action {

@@ -1,7 +1,5 @@
-use martini::converter::engine::EngineRegistry;
 use martini::watcher::{DirectoryWatcher, OriginalAction, WatchRule};
 use std::fs;
-use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
@@ -9,7 +7,6 @@ use tempfile::tempdir;
 fn test_watcher_settle_and_convert() {
     let inbox = tempdir().unwrap();
     let outbox = tempdir().unwrap();
-    let registry = Arc::new(EngineRegistry::default());
 
     let rule = WatchRule {
         input_dir: inbox.path().to_path_buf(),
@@ -22,7 +19,7 @@ fn test_watcher_settle_and_convert() {
         initial_scan: false,
     };
 
-    let watcher = DirectoryWatcher::new(rule, registry);
+    let watcher = DirectoryWatcher::new(rule);
     let (tx, rx) = std::sync::mpsc::channel();
 
     let handle = std::thread::spawn(move || watcher.run_with_timeout(rx, Duration::from_secs(3)));
@@ -51,7 +48,6 @@ fn test_watcher_settle_and_convert() {
 fn test_watcher_initial_scan() {
     let inbox = tempdir().unwrap();
     let outbox = tempdir().unwrap();
-    let registry = Arc::new(EngineRegistry::default());
 
     // Pre-create file in inbox
     fs::write(inbox.path().join("existing.json"), r#"{"item": "pre"}"#).unwrap();
@@ -67,7 +63,7 @@ fn test_watcher_initial_scan() {
         initial_scan: true, // Should convert existing file on start
     };
 
-    let watcher = DirectoryWatcher::new(rule, registry);
+    let watcher = DirectoryWatcher::new(rule);
     let (tx, rx) = std::sync::mpsc::channel();
 
     let handle = std::thread::spawn(move || watcher.run_with_timeout(rx, Duration::from_secs(2)));

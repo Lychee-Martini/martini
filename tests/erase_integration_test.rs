@@ -84,10 +84,35 @@ fn test_erase_save_mask_flag() {
         "--mask",
         mask_file.to_str().unwrap(),
         "--save-mask",
+        "--fast",
     ])
     .assert()
     .success();
 
     let saved_mask = tmp.path().join("item_mask.png");
     assert!(saved_mask.exists());
+}
+
+#[test]
+fn test_erase_fast_mode_end_to_end() {
+    let dir = tempdir().unwrap();
+    let input_path = dir.path().join("test_input.png");
+    let output_path = dir.path().join("test_output.png");
+
+    let img = image::RgbaImage::from_pixel(64, 64, image::Rgba([200, 200, 200, 255]));
+    img.save(&input_path).unwrap();
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.args([
+        "erase",
+        input_path.to_str().unwrap(),
+        "-o",
+        output_path.to_str().unwrap(),
+        "-t",
+        "watermark",
+        "--fast",
+        "--json",
+    ]);
+    cmd.assert().success();
+    assert!(output_path.exists());
 }

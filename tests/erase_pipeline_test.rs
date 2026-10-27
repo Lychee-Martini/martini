@@ -14,9 +14,7 @@ fn test_blend_result_preserves_unmasked_pixels() {
     }
 
     let crop = (25, 25, 50, 50);
-    let blended =
-        martini::erase::pipeline::InpaintPipeline::blend_result(&original, &patch, &mask, crop)
-            .unwrap();
+    let blended = martini::erase::pipeline::blend_patch(&original, &patch, &mask, crop).unwrap();
 
     // Pixel far outside the crop should remain original red: [255, 0, 0, 255]
     assert_eq!(blended.get_pixel(10, 10), Rgba([255, 0, 0, 255]));
@@ -36,9 +34,7 @@ fn test_blend_result_dimensions_match_original() {
     let mask = GrayImage::new(120, 80);
     let crop = (10, 10, 40, 40);
 
-    let blended =
-        martini::erase::pipeline::InpaintPipeline::blend_result(&original, &patch, &mask, crop)
-            .unwrap();
+    let blended = martini::erase::pipeline::blend_patch(&original, &patch, &mask, crop).unwrap();
 
     assert_eq!(blended.width(), 120);
     assert_eq!(blended.height(), 80);
@@ -58,14 +54,7 @@ fn test_inpaint_replaces_masked_pixels_with_background() {
     }
 
     let dyn_img = DynamicImage::ImageRgba8(img);
-    let paths = martini::erase::models::ModelPaths {
-        clip_weights: std::path::PathBuf::new(),
-        tokenizer: std::path::PathBuf::new(),
-        unet_weights: std::path::PathBuf::new(),
-        vae_weights: std::path::PathBuf::new(),
-    };
-    let pipeline = martini::erase::pipeline::InpaintPipeline::load(&paths).unwrap();
-    let inpainted = pipeline.inpaint(&dyn_img, &mask, 15).unwrap();
+    let inpainted = martini::erase::pipeline::inpaint_classical(&dyn_img, &mask, 15).unwrap();
 
     // Center pixel should now be filled with surrounding white (> 250)
     let center_px = inpainted.get_pixel(30, 30);
