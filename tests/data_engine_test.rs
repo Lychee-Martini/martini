@@ -1,5 +1,4 @@
 use martini::converter::ConvertOptions;
-use martini::converter::engine::FormatEngine;
 use martini::converter::engine::data::DataEngine;
 use std::fs;
 use tempfile::tempdir;

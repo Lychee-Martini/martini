@@ -5,12 +5,11 @@ use std::str::FromStr;
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
 
-use martini::cli::ui::{CliProgressTracker, print_report_table, print_setup_panel};
+use martini::cli::ui::{print_report_table, print_setup_panel};
 use martini::cli::{CliArgs, Commands};
 use martini::converter::{self, ConversionResult, ConvertOptions, Format, OutputFileMetadata};
 use martini::error::MartiniError;
 use martini::{BatchConvertOptions, batch_convert};
-use std::sync::Arc;
 
 fn normalize_args<I, T>(raw_args: I) -> Vec<std::ffi::OsString>
 where
@@ -97,7 +96,11 @@ fn main() {
     }
 }
 
-fn run(args: CliArgs) -> Result<i32, MartiniError> {
+fn run(mut args: CliArgs) -> Result<i32, MartiniError> {
+    if let Some(p_name) = args.command.preset_name() {
+        martini::Preset::load(p_name)?.apply_to(&mut args.command);
+    }
+
     match args.command {
         Commands::ListFormats => {
             let formats = martini::all_capabilities();
@@ -171,33 +174,28 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     }
                 }
                 martini::cli::commands::PresetAction::Show { name } => {
-                    if let Some(preset) = manager.get(&name) {
-                        if args.json {
-                            println!("{}", serde_json::to_string_pretty(preset).unwrap());
-                        } else {
-                            println!("Preset '{}':\n{:#?}", name, preset);
-                        }
+                    let preset = martini::Preset::load(&name)?;
+                    if args.json {
+                        println!("{}", serde_json::to_string_pretty(&preset).unwrap());
                     } else {
-                        return Err(MartiniError::InvalidInputData {
-                            reason: format!("Preset '{}' not found", name),
-                        });
+                        println!("Preset '{}':\n{:#?}", name, preset);
                     }
                 }
             }
             Ok(0)
         }
         Commands::Convert {
-            mut from,
-            mut to,
+            from,
+            to,
             input,
             input_flag,
             output,
             output_flag,
             package,
-            mut quality,
-            mut lossless,
-            mut recursive,
-            mut delete_original,
+            quality,
+            lossless,
+            recursive,
+            delete_original,
             overwrite,
             workers,
             pages,
@@ -205,52 +203,16 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
             width,
             height,
             no_upscale,
-            mut theme,
-            mut paper_size,
+            theme,
+            paper_size,
             margin,
             font_family,
             header,
             footer,
             no_page_numbers,
             toc,
-            preset,
+            preset: _,
         } => {
-            if let Some(ref p_name) = preset {
-                let manager = martini::preset::PresetManager::load();
-                if let Some(p) = manager.get(p_name) {
-                    if from == "auto"
-                        && let Some(ref f) = p.from
-                    {
-                        from = f.clone();
-                    }
-                    if to.is_none() {
-                        to = Some(p.to.clone());
-                    }
-                    if let Some(q) = p.quality {
-                        quality = q;
-                    }
-                    if let Some(l) = p.lossless {
-                        lossless = l;
-                    }
-                    if let Some(r) = p.recursive {
-                        recursive = r;
-                    }
-                    if let Some(d) = p.delete_original {
-                        delete_original = d;
-                    }
-                    if theme.is_none() && p.theme.is_some() {
-                        theme = p.theme.clone();
-                    }
-                    if paper_size.is_none() && p.paper_size.is_some() {
-                        paper_size = p.paper_size.clone();
-                    }
-                } else {
-                    return Err(MartiniError::InvalidInputData {
-                        reason: format!("Preset '{}' not found", p_name),
-                    });
-                }
-            }
-
             let input = input
                 .or(input_flag)
                 .expect("Input must be provided either as positional argument or via --input");
@@ -413,8 +375,6 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     ProgressBar::hidden()
                 };
 
-                let tracker = Arc::new(CliProgressTracker { pb: pb.clone() });
-
                 let batch_options = BatchConvertOptions {
                     input_dir: input_resolved.clone(),
                     output_dir: output.clone(),
@@ -442,7 +402,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                     toc,
                 };
 
-                let batch_result = batch_convert(batch_options, Some(tracker))?;
+                let batch_result = batch_convert(batch_options, Some(&pb))?;
 
                 pb.finish_and_clear();
 
@@ -503,55 +463,37 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
 
                 let mut output_files = Vec::new();
 
+                let filename =
+                    input_resolved
+                        .file_name()
+                        .ok_or_else(|| MartiniError::InvalidInputData {
+                            reason: "Input path has no filename".to_string(),
+                        })?;
+                let filename_str = filename.to_string_lossy();
+                let base_stem = if filename_str.to_lowercase().ends_with(".tar.gz") {
+                    &filename_str[..filename_str.len() - 7]
+                } else if let Some(dot_idx) = filename_str.rfind('.') {
+                    &filename_str[..dot_idx]
+                } else {
+                    &filename_str
+                };
+                let format_output_name = |fmt: &Format| -> String {
+                    let ext = if *fmt == Format::Gz {
+                        "tar.gz"
+                    } else {
+                        &fmt.to_string()
+                    };
+                    format!("{}.{}", base_stem, ext)
+                };
+
                 for target_fmt in &targets {
                     let out_path = match &output {
-                        Some(out) => {
-                            if out.is_dir() {
-                                let filename = input_resolved.file_name().ok_or_else(|| {
-                                    MartiniError::InvalidInputData {
-                                        reason: "Input path has no filename".to_string(),
-                                    }
-                                })?;
-                                let filename_str = filename.to_string_lossy();
-                                let base_stem = if filename_str.to_lowercase().ends_with(".tar.gz")
-                                {
-                                    &filename_str[..filename_str.len() - 7]
-                                } else if let Some(dot_idx) = filename_str.rfind('.') {
-                                    &filename_str[..dot_idx]
-                                } else {
-                                    &filename_str
-                                };
-                                let ext = if *target_fmt == Format::Gz {
-                                    "tar.gz"
-                                } else {
-                                    &target_fmt.to_string()
-                                };
-                                out.join(format!("{}.{}", base_stem, ext))
-                            } else if targets.len() > 1 {
-                                out.with_extension(target_fmt.to_string())
-                            } else {
-                                out.clone()
-                            }
+                        Some(out) if out.is_dir() => out.join(format_output_name(target_fmt)),
+                        Some(out) if targets.len() > 1 => {
+                            out.with_extension(target_fmt.to_string())
                         }
-                        None => {
-                            let filename_str = input_resolved
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or("");
-                            let base_stem = if filename_str.to_lowercase().ends_with(".tar.gz") {
-                                &filename_str[..filename_str.len() - 7]
-                            } else if let Some(dot_idx) = filename_str.rfind('.') {
-                                &filename_str[..dot_idx]
-                            } else {
-                                filename_str
-                            };
-                            let ext = if *target_fmt == Format::Gz {
-                                "tar.gz"
-                            } else {
-                                &target_fmt.to_string()
-                            };
-                            input_resolved.with_file_name(format!("{}.{}", base_stem, ext))
-                        }
+                        Some(out) => out.clone(),
+                        None => input_resolved.with_file_name(format_output_name(target_fmt)),
                     };
 
                     if out_path.exists() && !overwrite {
@@ -636,39 +578,16 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
         Commands::Watch {
             input,
             output,
-            preset,
+            preset: _,
             to,
             settle_ms,
-            mut recursive,
+            recursive,
             initial,
-            mut delete_original,
-            mut move_originals,
+            delete_original,
+            move_originals,
             overwrite,
         } => {
-            let mut target_format_str = to;
-            if let Some(ref p_name) = preset {
-                let manager = martini::preset::PresetManager::load();
-                if let Some(p) = manager.get(p_name) {
-                    if target_format_str.is_none() {
-                        target_format_str = Some(p.to.clone());
-                    }
-                    if let Some(r) = p.recursive {
-                        recursive = r;
-                    }
-                    if let Some(d) = p.delete_original {
-                        delete_original = d;
-                    }
-                    if move_originals.is_none() && p.move_originals.is_some() {
-                        move_originals = p.move_originals.clone();
-                    }
-                } else {
-                    return Err(MartiniError::InvalidInputData {
-                        reason: format!("Preset '{}' not found", p_name),
-                    });
-                }
-            }
-
-            let format_override = if let Some(ref s) = target_format_str {
+            let format_override = if let Some(ref s) = to {
                 Some(
                     Format::from_str(s)
                         .map_err(|e| MartiniError::InvalidInputData { reason: e })?,
@@ -696,9 +615,7 @@ fn run(args: CliArgs) -> Result<i32, MartiniError> {
                 initial_scan: initial,
             };
 
-            let registry =
-                std::sync::Arc::new(martini::converter::engine::EngineRegistry::default());
-            let watcher = martini::watcher::DirectoryWatcher::new(rule, registry);
+            let watcher = martini::watcher::DirectoryWatcher::new(rule);
 
             let (_tx, rx) = std::sync::mpsc::channel();
 

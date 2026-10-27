@@ -1,5 +1,4 @@
 use martini::converter::ConvertOptions;
-use martini::converter::engine::FormatEngine;
 use martini::converter::engine::archive::ArchiveEngine;
 use std::fs;
 use std::io::Read;

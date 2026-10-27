@@ -181,3 +181,17 @@ impl ClipGrounding {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_heatmap_scaling() {
+        let raw_scores = vec![0.1f32, 0.5, 0.9, 0.3];
+        let normalized = normalize_heatmap(&raw_scores, 2, 2, 0.5);
+        assert_eq!(normalized.dimensions(), (2, 2));
+        assert_eq!(normalized.get_pixel(0, 1)[0], 255);
+        assert_eq!(normalized.get_pixel(0, 0)[0], 0);
+    }
+}

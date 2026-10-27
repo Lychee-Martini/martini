@@ -1,8 +1,8 @@
+use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 
 use crate::converter::Format;
 use crate::error::MartiniError;
@@ -52,33 +52,28 @@ pub struct BatchResult {
     pub deletion_errors: Vec<(String, String)>,
 }
 
-pub trait ProgressTracker: Send + Sync {
-    fn set_message(&self, msg: &str);
-    fn inc(&self, delta: u64);
-}
-
 pub fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> Vec<PathBuf> {
     let mut image_files = Vec::new();
-    let extensions: HashSet<&str> = match from_filter.to_lowercase().as_str() {
-        "png" => ["png"].iter().copied().collect(),
-        "jpg" | "jpeg" => ["jpg", "jpeg"].iter().copied().collect(),
-        "webp" => ["webp"].iter().copied().collect(),
-        "avif" => ["avif"].iter().copied().collect(),
-        "svg" => ["svg"].iter().copied().collect(),
-        "bmp" => ["bmp"].iter().copied().collect(),
-        "tiff" | "tif" => ["tiff", "tif"].iter().copied().collect(),
-        "qoi" => ["qoi"].iter().copied().collect(),
-        "pdf" => ["pdf"].iter().copied().collect(),
-        "md" | "markdown" => ["md", "markdown"].iter().copied().collect(),
-        "json" => ["json"].iter().copied().collect(),
-        "yaml" | "yml" => ["yaml", "yml"].iter().copied().collect(),
-        "toml" => ["toml"].iter().copied().collect(),
-        "csv" => ["csv"].iter().copied().collect(),
-        "tsv" => ["tsv"].iter().copied().collect(),
-        "zip" => ["zip"].iter().copied().collect(),
-        "tar" => ["tar"].iter().copied().collect(),
-        "gz" | "tar.gz" | "tgz" => ["gz", "tgz"].iter().copied().collect(),
-        _ => ["png", "jpg", "jpeg"].iter().copied().collect(), // default/auto
+    let extensions: &[&str] = match from_filter.to_lowercase().as_str() {
+        "png" => &["png"],
+        "jpg" | "jpeg" => &["jpg", "jpeg"],
+        "webp" => &["webp"],
+        "avif" => &["avif"],
+        "svg" => &["svg"],
+        "bmp" => &["bmp"],
+        "tiff" | "tif" => &["tiff", "tif"],
+        "qoi" => &["qoi"],
+        "pdf" => &["pdf"],
+        "md" | "markdown" => &["md", "markdown"],
+        "json" => &["json"],
+        "yaml" | "yml" => &["yaml", "yml"],
+        "toml" => &["toml"],
+        "csv" => &["csv"],
+        "tsv" => &["tsv"],
+        "zip" => &["zip"],
+        "tar" => &["tar"],
+        "gz" | "tar.gz" | "tgz" => &["gz", "tgz"],
+        _ => &["png", "jpg", "jpeg"], // default/auto
     };
 
     let mut dirs_to_visit = vec![directory.to_path_buf()];
@@ -101,7 +96,7 @@ pub fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> V
                     }
                 } else if path.is_file()
                     && let Some(ext) = path.extension().and_then(|e| e.to_str())
-                    && extensions.contains(ext.to_lowercase().as_str())
+                    && extensions.contains(&ext.to_lowercase().as_str())
                 {
                     image_files.push(path);
                 }
@@ -115,7 +110,7 @@ pub fn get_all_images(directory: &Path, recursive: bool, from_filter: &str) -> V
 
 pub fn batch_convert(
     options: BatchConvertOptions,
-    tracker: Option<Arc<dyn ProgressTracker>>,
+    progress: Option<&ProgressBar>,
 ) -> Result<BatchResult, MartiniError> {
     if !options.input_dir.exists() {
         return Err(MartiniError::InputFileNotFound {
@@ -150,20 +145,18 @@ pub fn batch_convert(
             .build_global();
     }
 
-    let tracker_arc = tracker;
-
     // Map each input file to its corresponding tasks and execute in parallel
     let tasks: Vec<TaskResult> = files
         .par_iter()
         .flat_map(|file_path| {
             let mut results = Vec::new();
 
-            if let Some(ref t) = tracker_arc {
+            if let Some(pb) = progress {
                 let filename = file_path
                     .file_name()
                     .map(|f| f.to_string_lossy())
                     .unwrap_or_default();
-                t.set_message(&format!("Converting {}", filename));
+                pb.set_message(format!("Converting {}", filename));
             }
 
             let input_bytes = match std::fs::read(file_path) {
@@ -178,8 +171,8 @@ pub fn batch_convert(
                             converted_size: 0,
                             error_message: Some(format!("Failed to read source file: {}", e)),
                         });
-                        if let Some(ref t) = tracker_arc {
-                            t.inc(1);
+                        if let Some(pb) = progress {
+                            pb.inc(1);
                         }
                     }
                     return results;
@@ -208,8 +201,8 @@ pub fn batch_convert(
                                 file_ext
                             )),
                         });
-                        if let Some(ref t) = tracker_arc {
-                            t.inc(1);
+                        if let Some(pb) = progress {
+                            pb.inc(1);
                         }
                     }
                     return results;
@@ -233,8 +226,8 @@ pub fn batch_convert(
                                         e
                                     )),
                                 });
-                                if let Some(ref t) = tracker_arc {
-                                    t.inc(1);
+                                if let Some(pb) = progress {
+                                    pb.inc(1);
                                 }
                                 continue;
                             }
@@ -251,8 +244,8 @@ pub fn batch_convert(
                                     converted_size: 0,
                                     error_message: Some(format!("Invalid file path prefix: {}", e)),
                                 });
-                                if let Some(ref t) = tracker_arc {
-                                    t.inc(1);
+                                if let Some(pb) = progress {
+                                    pb.inc(1);
                                 }
                                 continue;
                             }
@@ -274,8 +267,8 @@ pub fn batch_convert(
                         converted_size,
                         error_message: None,
                     });
-                    if let Some(ref t) = tracker_arc {
-                        t.inc(1);
+                    if let Some(pb) = progress {
+                        pb.inc(1);
                     }
                     continue;
                 }
@@ -331,8 +324,8 @@ pub fn batch_convert(
                     }
                 }
 
-                if let Some(ref t) = tracker_arc {
-                    t.inc(1);
+                if let Some(pb) = progress {
+                    pb.inc(1);
                 }
             }
 

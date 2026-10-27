@@ -266,7 +266,12 @@ pub fn all_capabilities() -> Vec<FormatCapability> {
             ],
         ),
         FormatCapability::new(img_from, "bmp", "Convert images to BMP format", batch_base),
-        FormatCapability::new(img_from, "tiff", "Convert images to TIFF format", batch_base),
+        FormatCapability::new(
+            img_from,
+            "tiff",
+            "Convert images to TIFF format",
+            batch_base,
+        ),
         FormatCapability::new(img_from, "qoi", "Convert images to QOI format", batch_base),
         FormatCapability::new(
             "pdf",

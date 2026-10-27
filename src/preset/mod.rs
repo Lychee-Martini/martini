@@ -19,6 +19,81 @@ pub struct Preset {
     pub paper_size: Option<String>,
 }
 
+impl Preset {
+    pub fn load(name: &str) -> Result<Self, MartiniError> {
+        PresetManager::load()
+            .get(name)
+            .cloned()
+            .ok_or_else(|| MartiniError::InvalidInputData {
+                reason: format!("Preset '{}' not found", name),
+            })
+    }
+
+    pub fn apply_to(&self, cmd: &mut crate::cli::Commands) {
+        match cmd {
+            crate::cli::Commands::Convert {
+                from,
+                to,
+                quality,
+                lossless,
+                recursive,
+                delete_original,
+                theme,
+                paper_size,
+                ..
+            } => {
+                if *from == "auto"
+                    && let Some(ref f) = self.from
+                {
+                    *from = f.clone();
+                }
+                if to.is_none() {
+                    *to = Some(self.to.clone());
+                }
+                if let Some(q) = self.quality {
+                    *quality = q;
+                }
+                if let Some(l) = self.lossless {
+                    *lossless = l;
+                }
+                if let Some(r) = self.recursive {
+                    *recursive = r;
+                }
+                if let Some(d) = self.delete_original {
+                    *delete_original = d;
+                }
+                if theme.is_none() && self.theme.is_some() {
+                    *theme = self.theme.clone();
+                }
+                if paper_size.is_none() && self.paper_size.is_some() {
+                    *paper_size = self.paper_size.clone();
+                }
+            }
+            crate::cli::Commands::Watch {
+                to,
+                recursive,
+                delete_original,
+                move_originals,
+                ..
+            } => {
+                if to.is_none() {
+                    *to = Some(self.to.clone());
+                }
+                if let Some(r) = self.recursive {
+                    *recursive = r;
+                }
+                if let Some(d) = self.delete_original {
+                    *delete_original = d;
+                }
+                if move_originals.is_none() && self.move_originals.is_some() {
+                    *move_originals = self.move_originals.clone();
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct PresetConfigFile {
     #[serde(default)]
@@ -45,7 +120,10 @@ impl PresetManager {
     pub fn load() -> Self {
         let mut manager = Self::empty();
         // 1. User config directory: %APPDATA%/martini/presets.toml or ~/.config/martini/presets.toml
-        if let Some(user_config) = get_user_config_path().filter(|p| p.exists()) {
+        if let Some(user_config) = dirs::config_dir()
+            .map(|p| p.join("martini").join("presets.toml"))
+            .filter(|p| p.exists())
+        {
             let _ = manager.merge_from_path(&user_config);
         }
         // 2. Project local: ./martini-presets.toml
@@ -86,20 +164,5 @@ impl PresetManager {
         let mut list: Vec<_> = self.presets.iter().map(|(k, v)| (k.as_str(), v)).collect();
         list.sort_by_key(|(k, _)| *k);
         list
-    }
-}
-
-fn get_user_config_path() -> Option<PathBuf> {
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        Some(PathBuf::from(appdata).join("martini").join("presets.toml"))
-    } else if let Ok(home) = std::env::var("HOME") {
-        Some(
-            PathBuf::from(home)
-                .join(".config")
-                .join("martini")
-                .join("presets.toml"),
-        )
-    } else {
-        None
     }
 }

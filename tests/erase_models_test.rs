@@ -33,3 +33,12 @@ fn test_verify_checksum_invalid() {
     let expected = "91e7d1e46e4bb64d0b9ea40628571bc8c305fda625179052759670b2fdff3831";
     assert!(!martini::erase::models::ModelManager::verify_checksum(&file_path, expected).unwrap());
 }
+
+#[test]
+fn test_model_manager_cache_paths() {
+    let tmp = tempdir().unwrap();
+    let mgr = martini::erase::models::ModelManager::new(Some(tmp.path())).unwrap();
+    let paths = mgr.get_expected_paths(martini::erase::models::InpaintModelPreset::Sd15);
+    assert!(paths.unet_weights.to_string_lossy().contains("sd-1.5"));
+    assert!(paths.clip_weights.to_string_lossy().contains("clip"));
+}

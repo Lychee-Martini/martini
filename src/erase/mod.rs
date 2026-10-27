@@ -10,7 +10,7 @@ use crate::erase::clip::ClipGrounding;
 use crate::erase::device::resolve_device_target;
 use crate::erase::mask::{compute_bounding_box, dilate_mask};
 use crate::erase::models::{InpaintModelPreset, ModelManager};
-use crate::erase::pipeline::{CandleInpainter, ClassicalInpainter, InpaintPipeline};
+use crate::erase::pipeline::{CandleInpainter, blend_patch, inpaint_classical};
 use crate::error::MartiniError;
 use clap::Args;
 use image::{GenericImageView, GrayImage, imageops};
@@ -249,8 +249,7 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
         let crop_mask = imageops::crop_imm(&mask, crop_x, crop_y, crop_w, crop_h).to_image();
 
         let inpainted_patch = if args.fast {
-            let classical = ClassicalInpainter::new();
-            classical.inpaint(&crop_patch, &crop_mask, args.steps)?
+            inpaint_classical(&crop_patch, &crop_mask, args.steps)?
         } else {
             let model_paths = model_mgr.ensure_models(args.model)?;
             #[cfg(feature = "nn-cpu")]
@@ -268,7 +267,7 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
         };
 
         let t_blend = Instant::now();
-        let blended = InpaintPipeline::blend_result(&img, &inpainted_patch, &mask, bbox)?;
+        let blended = blend_patch(&img, &inpainted_patch, &mask, bbox)?;
         let blend_ms = t_blend.elapsed().as_millis() as u64;
 
         if let Some(ref mut rep) = benchmark_report {

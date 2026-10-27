@@ -62,7 +62,15 @@ pub fn select_candle_device(target: DeviceTarget) -> (Device, String) {
     }
 }
 
-/// Returns estimated peak allocated VRAM in MB if running on CUDA
-pub fn get_peak_vram_mb() -> Option<usize> {
-    None
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_device_target_parsing() {
+        assert_eq!(resolve_device_target("auto").unwrap(), DeviceTarget::Auto);
+        assert_eq!(resolve_device_target("cuda").unwrap(), DeviceTarget::Cuda);
+        assert_eq!(resolve_device_target("cpu").unwrap(), DeviceTarget::Cpu);
+        assert!(resolve_device_target("invalid").is_err());
+    }
 }

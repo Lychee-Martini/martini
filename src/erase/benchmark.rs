@@ -84,3 +84,16 @@ impl BenchmarkReport {
         println!("+---------------------------+------------+\n");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_benchmark_report_calculations() {
+        let report = BenchmarkReport::new(100, 50, 800, 20, 60, 10, Some(2400));
+        assert_eq!(report.denoise_step_avg_ms, 40.0);
+        assert_eq!(report.total_ms, 1020);
+        assert_eq!(report.peak_vram_mb, Some(2400));
+    }
+}

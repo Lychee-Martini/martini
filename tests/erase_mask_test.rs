@@ -87,15 +87,7 @@ fn test_detect_text_on_sample_image() {
     assert!(positive_count > 100);
 
     // Inpaint in memory and verify text area was replaced with clean background
-    let paths = martini::erase::models::ModelPaths {
-        clip_weights: std::path::PathBuf::new(),
-        tokenizer: std::path::PathBuf::new(),
-        unet_weights: std::path::PathBuf::new(),
-        vae_weights: std::path::PathBuf::new(),
-        text_encoder_weights: std::path::PathBuf::new(),
-    };
-    let pipeline = martini::erase::pipeline::InpaintPipeline::load(&paths).unwrap();
-    let inpainted = pipeline.inpaint(&img, &mask, 15).unwrap();
+    let inpainted = martini::erase::pipeline::inpaint_classical(&img, &mask, 15).unwrap();
 
     let (w, h) = img.dimensions();
     let mut diff_count = 0;
