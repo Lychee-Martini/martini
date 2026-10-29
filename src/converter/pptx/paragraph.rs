@@ -1,8 +1,6 @@
 use crate::converter::pptx::extract::RawTextItem;
 use crate::converter::pptx::font::resolve_font_names;
-use crate::converter::pptx::ir::{
-    ColorRgb, Paragraph, RectEmu, TextAlign, TextBox, TextRun,
-};
+use crate::converter::pptx::ir::{ColorRgb, Paragraph, RectEmu, TextAlign, TextBox, TextRun};
 
 #[derive(Debug)]
 struct TextCluster {
