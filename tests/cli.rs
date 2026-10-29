@@ -880,3 +880,34 @@ fn test_cli_convert_archive_tar_to_zip() {
     entry.read_to_string(&mut content).unwrap();
     assert_eq!(content, "martini archive test");
 }
+
+#[test]
+fn test_cli_convert_pdf_to_pptx() {
+    let _guard = PDFIUM_LOCK.lock().unwrap();
+    let _pdfium = get_pdfium_for_test();
+
+    let temp_dir = tempdir().unwrap();
+    let pdf_path = temp_dir.path().join("presentation.pdf");
+    let pptx_path = temp_dir.path().join("presentation.pptx");
+
+    let typst_src = "#set page(width: 120mm, height: 80mm)\n= Martini PPTX\nHello slides!";
+    let pdf_bytes = martini::converter::typst_engine::compile_typst_to_pdf(
+        typst_src,
+        std::path::Path::new("."),
+    )
+    .unwrap();
+    fs::write(&pdf_path, pdf_bytes).unwrap();
+
+    let mut cmd = Command::cargo_bin("martini").unwrap();
+    cmd.arg("convert")
+        .arg("-i")
+        .arg(&pdf_path)
+        .arg("-o")
+        .arg(&pptx_path)
+        .assert()
+        .success();
+
+    assert!(pptx_path.exists());
+    let metadata = fs::metadata(&pptx_path).unwrap();
+    assert!(metadata.len() > 0);
+}

@@ -205,4 +205,8 @@ impl SlideIR {
             slides: Vec::new(),
         }
     }
+
+    pub fn add_slide(&mut self, slide: Slide) {
+        self.slides.push(slide);
+    }
 }
