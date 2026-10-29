@@ -1,6 +1,9 @@
 use crate::converter::{ConversionResult, ConvertOptions};
 use crate::error::MartiniError;
 
+pub mod font;
+pub mod ir;
+
 pub fn convert_pdf_to_pptx(
     _input_data: &[u8],
     _options: &ConvertOptions,
