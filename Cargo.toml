@@ -22,7 +22,7 @@ name = "martini"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["nn-cpu"]
 nn-cpu = [
     "dep:candle-core",
     "dep:candle-transformers",
