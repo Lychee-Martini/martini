@@ -29,11 +29,11 @@ struct TableState {
     current_row_cells: Vec<TableCell>,
 }
 
+#[derive(Default)]
 struct StyleState {
     bold: bool,
     italic: bool,
     strikethrough: bool,
-    is_code: bool,
     link: Option<String>,
 }
 
@@ -56,13 +56,7 @@ pub fn convert_markdown(
 
     let mut doc = Docx::new();
 
-    let mut style = StyleState {
-        bold: false,
-        italic: false,
-        strikethrough: false,
-        is_code: false,
-        link: None,
-    };
+    let mut style = StyleState::default();
 
     let mut current_para: Option<ParagraphState> = None;
     let mut list_stack: Vec<ListState> = Vec::new();
@@ -211,54 +205,28 @@ pub fn convert_markdown(
                 }
                 TagEnd::Table => {
                     if let Some(ts) = table_state.take() {
-                        let borders = TableBorders::new()
-                            .set(
-                                TableBorder::new(TableBorderPosition::Top)
+                        let borders = [
+                            TableBorderPosition::Top,
+                            TableBorderPosition::Bottom,
+                            TableBorderPosition::Left,
+                            TableBorderPosition::Right,
+                            TableBorderPosition::InsideH,
+                            TableBorderPosition::InsideV,
+                        ]
+                        .into_iter()
+                        .fold(TableBorders::new(), |b, pos| {
+                            b.set(
+                                TableBorder::new(pos)
                                     .border_type(BorderType::Single)
                                     .size(4)
                                     .color("CCCCCC"),
                             )
-                            .set(
-                                TableBorder::new(TableBorderPosition::Bottom)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"),
-                            )
-                            .set(
-                                TableBorder::new(TableBorderPosition::Left)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"),
-                            )
-                            .set(
-                                TableBorder::new(TableBorderPosition::Right)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"),
-                            )
-                            .set(
-                                TableBorder::new(TableBorderPosition::InsideH)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"),
-                            )
-                            .set(
-                                TableBorder::new(TableBorderPosition::InsideV)
-                                    .border_type(BorderType::Single)
-                                    .size(4)
-                                    .color("CCCCCC"),
-                            );
+                        });
                         let table = Table::new(ts.rows).set_borders(borders);
                         doc = doc.add_table(table);
                     }
                 }
-                TagEnd::TableHead => {
-                    if let Some(ref mut ts) = table_state {
-                        let cells = std::mem::take(&mut ts.current_row_cells);
-                        ts.rows.push(TableRow::new(cells));
-                    }
-                }
-                TagEnd::TableRow => {
+                TagEnd::TableHead | TagEnd::TableRow => {
                     if let Some(ref mut ts) = table_state {
                         let cells = std::mem::take(&mut ts.current_row_cells);
                         ts.rows.push(TableRow::new(cells));
@@ -303,9 +271,6 @@ pub fn convert_markdown(
                     }
                     if style.strikethrough {
                         run = run.strike();
-                    }
-                    if style.is_code {
-                        run = run.color("A71D5D");
                     }
                 }
 

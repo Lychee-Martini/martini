@@ -172,11 +172,7 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
     #[cfg(not(feature = "nn-cpu"))]
     let dev_name = "CPU".to_string();
 
-    let mut benchmark_report = if args.benchmark {
-        Some(BenchmarkReport::new(0, 0, 0, 0, 0, 0, None))
-    } else {
-        None
-    };
+    let mut benchmark_report = args.benchmark.then(BenchmarkReport::default);
 
     let model_mgr = ModelManager::new(args.model_dir.as_deref())?;
 

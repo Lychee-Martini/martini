@@ -1,14 +1,49 @@
-pub mod debouncer;
-
 use crate::converter::{ConvertOptions, Format};
 use crate::error::MartiniError;
-use debouncer::DebounceQueue;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
+
+struct DebounceQueue {
+    pending: HashMap<PathBuf, Instant>,
+    settle_duration: Duration,
+}
+
+impl DebounceQueue {
+    fn new(settle_duration: Duration) -> Self {
+        Self {
+            pending: HashMap::new(),
+            settle_duration,
+        }
+    }
+
+    fn insert_or_update(&mut self, path: PathBuf) {
+        self.pending
+            .insert(path, Instant::now() + self.settle_duration);
+    }
+
+    fn pop_settled(&mut self) -> Vec<PathBuf> {
+        let now = Instant::now();
+        let mut settled = Vec::new();
+        self.pending.retain(|path, &mut settle_at| {
+            if now >= settle_at {
+                settled.push(path.clone());
+                false
+            } else {
+                true
+            }
+        });
+        settled
+    }
+
+    fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OriginalAction {

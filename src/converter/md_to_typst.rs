@@ -1,373 +1,323 @@
+use crate::converter::typst_engine::compile_typst_to_pdf;
+use crate::converter::{ConversionResult, ConvertOptions, Format, OutputFileMetadata};
+use crate::error::MartiniError;
 use pulldown_cmark::{Alignment, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Clone)]
-pub struct MdToTypstOptions {
-    pub theme: Option<String>,
-    pub paper_size: Option<String>,
-    pub margin: Option<String>,
-    pub font_family: Option<String>,
-    pub header: Option<String>,
-    pub footer: Option<String>,
-    pub no_page_numbers: bool,
-    pub toc: bool,
-}
+pub fn convert_markdown_to_pdf(
+    input_data: &[u8],
+    options: &ConvertOptions,
+) -> Result<ConversionResult, MartiniError> {
+    let markdown_str =
+        std::str::from_utf8(input_data).map_err(|e| MartiniError::InvalidInputData {
+            reason: format!("Input is not valid UTF-8: {}", e),
+        })?;
 
-impl Default for MdToTypstOptions {
-    fn default() -> Self {
-        Self {
-            theme: Some("github".to_string()),
-            paper_size: Some("a4".to_string()),
-            margin: Some("20mm".to_string()),
-            font_family: None,
-            header: None,
-            footer: None,
-            no_page_numbers: false,
-            toc: false,
-        }
+    let base_dir = options
+        .input_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+
+    let typst_markup = translate_md_to_typst(markdown_str, options);
+    let pdf_bytes = compile_typst_to_pdf(&typst_markup, base_dir)?;
+
+    if let Some(parent) = options
+        .output_path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
     }
+
+    fs::write(&options.output_path, &pdf_bytes)?;
+
+    let size = options
+        .output_path
+        .metadata()
+        .map(|m| m.len())
+        .unwrap_or(pdf_bytes.len() as u64);
+
+    Ok(ConversionResult {
+        from: Format::Md,
+        to: Format::Pdf,
+        output_files: vec![OutputFileMetadata {
+            path: options.output_path.to_string_lossy().to_string(),
+            size_bytes: size,
+            description: "Converted from Markdown to PDF".to_string(),
+        }],
+    })
 }
 
-pub struct MarkdownToTypst;
+pub fn translate_md_to_typst(markdown: &str, options: &ConvertOptions) -> String {
+    let mut typst = String::new();
 
-impl MarkdownToTypst {
-    pub fn translate(markdown: &str, options: &MdToTypstOptions, _base_dir: &Path) -> String {
-        let mut typst = String::new();
+    // 1. Setup Document Header & Styling
+    typst.push_str(&generate_document_preamble(options));
 
-        // 1. Setup Document Header & Styling
-        typst.push_str(&generate_document_preamble(options));
+    // 2. Insert TOC if requested
+    if options.toc {
+        typst.push_str("#outline(indent: auto)\n#v(1.5em)\n");
+    }
 
-        // 2. Insert TOC if requested
-        if options.toc {
-            typst.push_str("#outline(indent: auto)\n#v(1.5em)\n");
-        }
+    // 3. Parse Markdown Events
+    let mut parser_options = Options::empty();
+    parser_options.insert(Options::ENABLE_TABLES);
+    parser_options.insert(Options::ENABLE_STRIKETHROUGH);
+    parser_options.insert(Options::ENABLE_TASKLISTS);
+    parser_options.insert(Options::ENABLE_MATH);
+    parser_options.insert(Options::ENABLE_FOOTNOTES);
 
-        // 3. Parse Markdown Events
-        let mut parser_options = Options::empty();
-        parser_options.insert(Options::ENABLE_TABLES);
-        parser_options.insert(Options::ENABLE_STRIKETHROUGH);
-        parser_options.insert(Options::ENABLE_TASKLISTS);
-        parser_options.insert(Options::ENABLE_MATH);
-        parser_options.insert(Options::ENABLE_FOOTNOTES);
+    let parser = Parser::new_ext(markdown, parser_options);
 
-        let parser = Parser::new_ext(markdown, parser_options);
+    let mut in_code_block = false;
+    let mut code_lang = String::new();
+    let mut code_content = String::new();
 
-        let mut in_code_block = false;
-        let mut code_lang = String::new();
-        let mut code_content = String::new();
+    let mut list_depth: usize = 0;
+    let mut ordered_list_stack = Vec::new();
 
-        let mut list_depth: usize = 0;
-        let mut ordered_list_stack = Vec::new();
+    let mut table_alignments = Vec::new();
+    let mut table_cells = Vec::new();
+    let mut in_table_head = false;
+    let mut table_header_cells = Vec::new();
+    let mut current_cell_content = String::new();
+    let mut in_table = false;
 
-        let mut table_alignments = Vec::new();
-        let mut table_cells = Vec::new();
-        let mut in_table_head = false;
-        let mut table_header_cells = Vec::new();
-        let mut current_cell_content = String::new();
-        let mut in_table = false;
+    let mut link_url = None;
+    let mut link_text = String::new();
 
-        let mut link_url = None;
-        let mut link_text = String::new();
+    let mut image_url = None;
+    let mut image_alt = String::new();
 
-        let mut image_url = None;
-        let mut image_alt = String::new();
+    macro_rules! target_buf {
+        () => {
+            if in_table {
+                &mut current_cell_content
+            } else if link_url.is_some() {
+                &mut link_text
+            } else {
+                &mut typst
+            }
+        };
+    }
 
-        for event in parser {
-            match event {
-                Event::Start(tag) => match tag {
-                    Tag::Heading { level, .. } => {
-                        let level_num = match level {
-                            HeadingLevel::H1 => 1,
-                            HeadingLevel::H2 => 2,
-                            HeadingLevel::H3 => 3,
-                            HeadingLevel::H4 => 4,
-                            HeadingLevel::H5 => 5,
-                            HeadingLevel::H6 => 6,
-                        };
-                        typst.push('\n');
-                        for _ in 0..level_num {
-                            typst.push('=');
-                        }
-                        typst.push(' ');
+    for event in parser {
+        match event {
+            Event::Start(tag) => match tag {
+                Tag::Heading { level, .. } => {
+                    let level_num = match level {
+                        HeadingLevel::H1 => 1,
+                        HeadingLevel::H2 => 2,
+                        HeadingLevel::H3 => 3,
+                        HeadingLevel::H4 => 4,
+                        HeadingLevel::H5 => 5,
+                        HeadingLevel::H6 => 6,
+                    };
+                    typst.push('\n');
+                    for _ in 0..level_num {
+                        typst.push('=');
                     }
-                    Tag::Paragraph => {
-                        if in_table {
-                            // in table cell, handled by cell
-                        } else if list_depth == 0 {
-                            typst.push('\n');
-                        }
-                    }
-                    Tag::BlockQuote(_kind) => {
-                        typst.push_str("\n#quote(block: true)[\n");
-                    }
-                    Tag::CodeBlock(kind) => {
-                        in_code_block = true;
-                        code_lang = match kind {
-                            pulldown_cmark::CodeBlockKind::Fenced(lang) => lang.to_string(),
-                            pulldown_cmark::CodeBlockKind::Indented => String::new(),
-                        };
-                        code_content.clear();
-                    }
-                    Tag::List(start) => {
-                        list_depth += 1;
-                        ordered_list_stack.push(start.is_some());
-                    }
-                    Tag::Item => {
-                        typst.push('\n');
-                        for _ in 1..list_depth {
-                            typst.push_str("  ");
-                        }
-                        if let Some(&is_ordered) = ordered_list_stack.last() {
-                            if is_ordered {
-                                typst.push_str("+ ");
-                            } else {
-                                typst.push_str("- ");
-                            }
-                        } else {
-                            typst.push_str("- ");
-                        }
-                    }
-                    Tag::Table(alignments) => {
-                        in_table = true;
-                        table_alignments = alignments;
-                        table_cells.clear();
-                        table_header_cells.clear();
-                    }
-                    Tag::TableHead => {
-                        in_table_head = true;
-                    }
-                    Tag::TableRow => {}
-                    Tag::TableCell => {
-                        current_cell_content.clear();
-                    }
-                    Tag::Strong => {
-                        if in_table {
-                            current_cell_content.push('*');
-                        } else if link_url.is_some() {
-                            link_text.push('*');
-                        } else {
-                            typst.push('*');
-                        }
-                    }
-                    Tag::Emphasis => {
-                        if in_table {
-                            current_cell_content.push('_');
-                        } else if link_url.is_some() {
-                            link_text.push('_');
-                        } else {
-                            typst.push('_');
-                        }
-                    }
-                    Tag::Strikethrough => {
-                        if in_table {
-                            current_cell_content.push_str("#strike[");
-                        } else if link_url.is_some() {
-                            link_text.push_str("#strike[");
-                        } else {
-                            typst.push_str("#strike[");
-                        }
-                    }
-                    Tag::Link { dest_url, .. } => {
-                        link_url = Some(dest_url.to_string());
-                        link_text.clear();
-                    }
-                    Tag::Image { dest_url, .. } => {
-                        image_url = Some(dest_url.to_string());
-                        image_alt.clear();
-                    }
-                    _ => {}
-                },
-                Event::End(tag_end) => match tag_end {
-                    TagEnd::Heading(_) => {
-                        typst.push('\n');
-                    }
-                    TagEnd::Paragraph => {
-                        if !in_table && list_depth == 0 {
-                            typst.push('\n');
-                        }
-                    }
-                    TagEnd::BlockQuote(_) => {
-                        typst.push_str("\n]\n");
-                    }
-                    TagEnd::CodeBlock => {
-                        in_code_block = false;
-                        typst.push_str("\n```");
-                        if !code_lang.is_empty() {
-                            typst.push_str(&code_lang);
-                        }
-                        typst.push('\n');
-                        typst.push_str(&code_content);
-                        if !code_content.ends_with('\n') {
-                            typst.push('\n');
-                        }
-                        typst.push_str("```\n");
-                    }
-                    TagEnd::List(_) => {
-                        list_depth = list_depth.saturating_sub(1);
-                        ordered_list_stack.pop();
-                        if list_depth == 0 {
-                            typst.push('\n');
-                        }
-                    }
-                    TagEnd::Item => {}
-                    TagEnd::TableHead => {
-                        in_table_head = false;
-                    }
-                    TagEnd::TableRow => {}
-                    TagEnd::TableCell => {
-                        let cell_str = current_cell_content.trim().to_string();
-                        if in_table_head {
-                            table_header_cells.push(cell_str);
-                        } else {
-                            table_cells.push(cell_str);
-                        }
-                    }
-                    TagEnd::Table => {
-                        in_table = false;
-                        typst.push_str(&format_typst_table(
-                            &table_alignments,
-                            &table_header_cells,
-                            &table_cells,
-                        ));
-                    }
-                    TagEnd::Strong => {
-                        if in_table {
-                            current_cell_content.push('*');
-                        } else if link_url.is_some() {
-                            link_text.push('*');
-                        } else {
-                            typst.push('*');
-                        }
-                    }
-                    TagEnd::Emphasis => {
-                        if in_table {
-                            current_cell_content.push('_');
-                        } else if link_url.is_some() {
-                            link_text.push('_');
-                        } else {
-                            typst.push('_');
-                        }
-                    }
-                    TagEnd::Strikethrough => {
-                        if in_table {
-                            current_cell_content.push(']');
-                        } else if link_url.is_some() {
-                            link_text.push(']');
-                        } else {
-                            typst.push(']');
-                        }
-                    }
-                    TagEnd::Link => {
-                        if let Some(url) = link_url.take() {
-                            let link_code =
-                                format!("#link(\"{}\")[{}]", escape_typst_string(&url), link_text);
-                            if in_table {
-                                current_cell_content.push_str(&link_code);
-                            } else {
-                                typst.push_str(&link_code);
-                            }
-                        }
-                    }
-                    TagEnd::Image => {
-                        if let Some(url) = image_url.take() {
-                            let url_normalized = url.replace('\\', "/");
-                            let img_code = if image_alt.is_empty() {
-                                format!(
-                                    "\n#align(center)[#image(\"{}\")]\n",
-                                    escape_typst_string(&url_normalized)
-                                )
-                            } else {
-                                format!(
-                                    "\n#figure(image(\"{}\"), caption: [{}])\n",
-                                    escape_typst_string(&url_normalized),
-                                    image_alt
-                                )
-                            };
-                            if in_table {
-                                current_cell_content.push_str(&format!(
-                                    "#image(\"{}\")",
-                                    escape_typst_string(&url_normalized)
-                                ));
-                            } else {
-                                typst.push_str(&img_code);
-                            }
-                        }
-                    }
-                    _ => {}
-                },
-                Event::Text(text) => {
-                    if in_code_block {
-                        code_content.push_str(&text);
-                    } else if in_table {
-                        current_cell_content.push_str(&escape_typst_content(&text));
-                    } else if link_url.is_some() {
-                        link_text.push_str(&escape_typst_content(&text));
-                    } else if image_url.is_some() {
-                        image_alt.push_str(&escape_typst_content(&text));
-                    } else {
-                        typst.push_str(&escape_typst_content(&text));
-                    }
+                    typst.push(' ');
                 }
-                Event::Code(code) => {
-                    let code_span = format!("`{}`", code.replace('`', "\\`"));
-                    if in_table {
-                        current_cell_content.push_str(&code_span);
-                    } else if link_url.is_some() {
-                        link_text.push_str(&code_span);
-                    } else {
-                        typst.push_str(&code_span);
-                    }
-                }
-                Event::InlineMath(math) => {
-                    let translated_math = latex_to_typst_math(&math);
-                    let math_str = format!("${}$", translated_math);
-                    if in_table {
-                        current_cell_content.push_str(&math_str);
-                    } else if link_url.is_some() {
-                        link_text.push_str(&math_str);
-                    } else {
-                        typst.push_str(&math_str);
-                    }
-                }
-                Event::DisplayMath(math) => {
-                    let translated_math = latex_to_typst_math(&math);
-                    let math_str = format!("\n$ {} $\n", translated_math.trim());
-                    typst.push_str(&math_str);
-                }
-                Event::SoftBreak => {
-                    if in_table {
-                        current_cell_content.push(' ');
-                    } else if link_url.is_some() {
-                        link_text.push(' ');
-                    } else {
+                Tag::Paragraph => {
+                    if !in_table && list_depth == 0 {
                         typst.push('\n');
                     }
                 }
-                Event::HardBreak => {
-                    if in_table {
-                        current_cell_content.push_str(" \\ ");
-                    } else if link_url.is_some() {
-                        link_text.push_str(" \\ ");
+                Tag::BlockQuote(_kind) => {
+                    typst.push_str("\n#quote(block: true)[\n");
+                }
+                Tag::CodeBlock(kind) => {
+                    in_code_block = true;
+                    code_lang = match kind {
+                        pulldown_cmark::CodeBlockKind::Fenced(lang) => lang.to_string(),
+                        pulldown_cmark::CodeBlockKind::Indented => String::new(),
+                    };
+                    code_content.clear();
+                }
+                Tag::List(start) => {
+                    list_depth += 1;
+                    ordered_list_stack.push(start.is_some());
+                }
+                Tag::Item => {
+                    typst.push('\n');
+                    for _ in 1..list_depth {
+                        typst.push_str("  ");
+                    }
+                    if ordered_list_stack.last().copied().unwrap_or(false) {
+                        typst.push_str("+ ");
                     } else {
-                        typst.push_str(" \\\n");
+                        typst.push_str("- ");
                     }
                 }
-                Event::Rule => {
-                    typst.push_str("\n#line(length: 100%, stroke: 0.5pt + luma(180))\n");
+                Tag::Table(alignments) => {
+                    in_table = true;
+                    table_alignments = alignments;
+                    table_cells.clear();
+                    table_header_cells.clear();
                 }
-                Event::TaskListMarker(checked) => {
-                    let marker = if checked { "[x] " } else { "[ ] " };
-                    typst.push_str(marker);
+                Tag::TableHead => {
+                    in_table_head = true;
+                }
+                Tag::TableRow => {}
+                Tag::TableCell => {
+                    current_cell_content.clear();
+                }
+                Tag::Strong => target_buf!().push('*'),
+                Tag::Emphasis => target_buf!().push('_'),
+                Tag::Strikethrough => target_buf!().push_str("#strike["),
+                Tag::Link { dest_url, .. } => {
+                    link_url = Some(dest_url.to_string());
+                    link_text.clear();
+                }
+                Tag::Image { dest_url, .. } => {
+                    image_url = Some(dest_url.to_string());
+                    image_alt.clear();
                 }
                 _ => {}
+            },
+            Event::End(tag_end) => match tag_end {
+                TagEnd::Heading(_) => {
+                    typst.push('\n');
+                }
+                TagEnd::Paragraph => {
+                    if !in_table && list_depth == 0 {
+                        typst.push('\n');
+                    }
+                }
+                TagEnd::BlockQuote(_) => {
+                    typst.push_str("\n]\n");
+                }
+                TagEnd::CodeBlock => {
+                    in_code_block = false;
+                    typst.push_str("\n```");
+                    if !code_lang.is_empty() {
+                        typst.push_str(&code_lang);
+                    }
+                    typst.push('\n');
+                    typst.push_str(&code_content);
+                    if !code_content.ends_with('\n') {
+                        typst.push('\n');
+                    }
+                    typst.push_str("```\n");
+                }
+                TagEnd::List(_) => {
+                    list_depth = list_depth.saturating_sub(1);
+                    ordered_list_stack.pop();
+                    if list_depth == 0 {
+                        typst.push('\n');
+                    }
+                }
+                TagEnd::Item => {}
+                TagEnd::TableHead => {
+                    in_table_head = false;
+                }
+                TagEnd::TableRow => {}
+                TagEnd::TableCell => {
+                    let cell_str = current_cell_content.trim().to_string();
+                    if in_table_head {
+                        table_header_cells.push(cell_str);
+                    } else {
+                        table_cells.push(cell_str);
+                    }
+                }
+                TagEnd::Table => {
+                    in_table = false;
+                    typst.push_str(&format_typst_table(
+                        &table_alignments,
+                        &table_header_cells,
+                        &table_cells,
+                    ));
+                }
+                TagEnd::Strong => target_buf!().push('*'),
+                TagEnd::Emphasis => target_buf!().push('_'),
+                TagEnd::Strikethrough => target_buf!().push(']'),
+                TagEnd::Link => {
+                    if let Some(url) = link_url.take() {
+                        let link_code =
+                            format!("#link(\"{}\")[{}]", escape_typst_string(&url), link_text);
+                        if in_table {
+                            current_cell_content.push_str(&link_code);
+                        } else {
+                            typst.push_str(&link_code);
+                        }
+                    }
+                }
+                TagEnd::Image => {
+                    if let Some(url) = image_url.take() {
+                        let url_normalized = url.replace('\\', "/");
+                        let img_code = if image_alt.is_empty() {
+                            format!(
+                                "\n#align(center)[#image(\"{}\")]\n",
+                                escape_typst_string(&url_normalized)
+                            )
+                        } else {
+                            format!(
+                                "\n#figure(image(\"{}\"), caption: [{}])\n",
+                                escape_typst_string(&url_normalized),
+                                image_alt
+                            )
+                        };
+                        if in_table {
+                            current_cell_content.push_str(&format!(
+                                "#image(\"{}\")",
+                                escape_typst_string(&url_normalized)
+                            ));
+                        } else {
+                            typst.push_str(&img_code);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            Event::Text(text) => {
+                if in_code_block {
+                    code_content.push_str(&text);
+                } else if image_url.is_some() && !in_table && link_url.is_none() {
+                    image_alt.push_str(&escape_typst_content(&text));
+                } else {
+                    target_buf!().push_str(&escape_typst_content(&text));
+                }
             }
+            Event::Code(code) => {
+                target_buf!().push_str(&format!("`{}`", code.replace('`', "\\`")));
+            }
+            Event::InlineMath(math) => {
+                target_buf!().push_str(&format!("${}$", latex_to_typst_math(&math)));
+            }
+            Event::DisplayMath(math) => {
+                let translated_math = latex_to_typst_math(&math);
+                typst.push_str(&format!("\n$ {} $\n", translated_math.trim()));
+            }
+            Event::SoftBreak => {
+                target_buf!().push(if in_table || link_url.is_some() {
+                    ' '
+                } else {
+                    '\n'
+                });
+            }
+            Event::HardBreak => {
+                target_buf!().push_str(if in_table || link_url.is_some() {
+                    " \\ "
+                } else {
+                    " \\\n"
+                });
+            }
+            Event::Rule => {
+                typst.push_str("\n#line(length: 100%, stroke: 0.5pt + luma(180))\n");
+            }
+            Event::TaskListMarker(checked) => {
+                typst.push_str(if checked { "[x] " } else { "[ ] " });
+            }
+            _ => {}
         }
-
-        typst
     }
+
+    typst
 }
 
-fn generate_document_preamble(options: &MdToTypstOptions) -> String {
+fn generate_document_preamble(options: &ConvertOptions) -> String {
     let mut preamble = String::new();
 
     // Paper size
@@ -758,7 +708,7 @@ fn replace_sub_super_braces(s: &str) -> String {
 }
 
 fn quote_multichar_identifiers(s: &str) -> String {
-    let builtins: std::collections::HashSet<&str> = [
+    const BUILTINS: &[&str] = &[
         "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh",
         "tanh", "log", "ln", "exp", "lim", "max", "min", "det", "dim", "gcd", "lcm", "deg", "arg",
         "ker", "hom", "mod", "inf", "sup", "root", "frac", "sqrt", "sum", "product", "integral",
@@ -768,65 +718,39 @@ fn quote_multichar_identifiers(s: &str) -> String {
         "Omega", "times", "dot", "div", "plus", "minus", "approx", "equiv", "tilde", "in", "oo",
         "diff", "nabla", "forall", "exists", "union", "sect", "subset", "supset", "and", "or",
         "not",
-    ]
-    .iter()
-    .copied()
-    .collect();
+    ];
 
     let mut out = String::new();
     let mut current_word = String::new();
     let mut in_quote = false;
+    let flush_word = |out: &mut String, word: &mut String, quoted: bool| {
+        if !word.is_empty() {
+            if !quoted && word.len() > 1 && !BUILTINS.contains(&word.as_str()) {
+                out.push('"');
+                out.push_str(word);
+                out.push('"');
+            } else {
+                out.push_str(word);
+            }
+            word.clear();
+        }
+    };
 
     for c in s.chars() {
         if c == '"' {
-            if !current_word.is_empty() {
-                if !in_quote && current_word.len() > 1 && !builtins.contains(current_word.as_str())
-                {
-                    out.push('"');
-                    out.push_str(&current_word);
-                    out.push('"');
-                } else {
-                    out.push_str(&current_word);
-                }
-                current_word.clear();
-            }
+            flush_word(&mut out, &mut current_word, in_quote);
             in_quote = !in_quote;
             out.push(c);
-            continue;
-        }
-
-        if in_quote {
+        } else if in_quote {
             out.push(c);
-            continue;
-        }
-
-        if c.is_ascii_alphabetic() {
+        } else if c.is_ascii_alphabetic() {
             current_word.push(c);
         } else {
-            if !current_word.is_empty() {
-                if current_word.len() > 1 && !builtins.contains(current_word.as_str()) {
-                    out.push('"');
-                    out.push_str(&current_word);
-                    out.push('"');
-                } else {
-                    out.push_str(&current_word);
-                }
-                current_word.clear();
-            }
+            flush_word(&mut out, &mut current_word, false);
             out.push(c);
         }
     }
-
-    if !current_word.is_empty() {
-        if !in_quote && current_word.len() > 1 && !builtins.contains(current_word.as_str()) {
-            out.push('"');
-            out.push_str(&current_word);
-            out.push('"');
-        } else {
-            out.push_str(&current_word);
-        }
-    }
-
+    flush_word(&mut out, &mut current_word, in_quote);
     out
 }
 
@@ -838,7 +762,7 @@ mod tests {
     fn test_translate_headings_and_styles() {
         let md =
             "# Title 1\n## Subtitle 2\n\nThis is **bold** and _italic_ text with `inline_code`.";
-        let typst = MarkdownToTypst::translate(md, &MdToTypstOptions::default(), Path::new("."));
+        let typst = translate_md_to_typst(md, &ConvertOptions::default());
         assert!(typst.contains("= Title 1"));
         assert!(typst.contains("== Subtitle 2"));
         assert!(typst.contains("*bold*"));
@@ -849,7 +773,7 @@ mod tests {
     #[test]
     fn test_translate_table_and_math() {
         let md = "| A | B |\n|---|---|\n| 1 | $x^2 + y^2 = z^2$ |";
-        let typst = MarkdownToTypst::translate(md, &MdToTypstOptions::default(), Path::new("."));
+        let typst = translate_md_to_typst(md, &ConvertOptions::default());
         assert!(typst.contains("#table("));
         assert!(typst.contains("$x^2 + y^2 = z^2$"));
     }

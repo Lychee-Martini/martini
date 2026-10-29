@@ -1,7 +1,5 @@
 use crate::error::MartiniError;
-use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 #[derive(
@@ -225,23 +223,5 @@ impl ModelManager {
         }
 
         Ok(())
-    }
-
-    pub fn verify_checksum(path: &Path, expected_sha256: &str) -> Result<bool, MartiniError> {
-        let mut file = fs::File::open(path).map_err(MartiniError::Io)?;
-        let mut hasher = Sha256::new();
-        let mut buffer = [0u8; 8192];
-
-        loop {
-            let bytes_read = file.read(&mut buffer).map_err(MartiniError::Io)?;
-            if bytes_read == 0 {
-                break;
-            }
-            hasher.update(&buffer[..bytes_read]);
-        }
-
-        let result = hasher.finalize();
-        let hex_str = format!("{:x}", result);
-        Ok(hex_str.eq_ignore_ascii_case(expected_sha256))
     }
 }

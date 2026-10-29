@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use crate::converter::Format;
+use crate::converter::{ConvertOptions, Format};
 use crate::error::MartiniError;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -23,26 +23,11 @@ pub struct BatchConvertOptions {
     pub output_dir: Option<PathBuf>,
     pub from_filter: String,
     pub targets: Vec<Format>,
-    pub quality: u8,
-    pub lossless: bool,
     pub recursive: bool,
-    pub overwrite: bool,
     pub delete_original: bool,
     pub workers: Option<usize>,
-    pub pages: Option<String>,
-    pub dpi: u16,
     pub files: Option<Vec<PathBuf>>,
-    pub width: Option<u32>,
-    pub height: Option<u32>,
-    pub no_upscale: bool,
-    pub theme: Option<String>,
-    pub paper_size: Option<String>,
-    pub margin: Option<String>,
-    pub font_family: Option<String>,
-    pub header: Option<String>,
-    pub footer: Option<String>,
-    pub no_page_numbers: bool,
-    pub toc: bool,
+    pub base: ConvertOptions,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -257,7 +242,7 @@ pub fn batch_convert(
                     None => file_path.with_extension(target_fmt.to_string()),
                 };
 
-                if out_path.exists() && !options.overwrite {
+                if out_path.exists() && !options.base.overwrite {
                     let converted_size = out_path.metadata().map(|m| m.len()).unwrap_or(0);
                     results.push(TaskResult {
                         input_path: file_path.to_string_lossy().to_string(),
@@ -273,26 +258,11 @@ pub fn batch_convert(
                     continue;
                 }
 
-                let convert_opts = crate::converter::ConvertOptions {
+                let convert_opts = ConvertOptions {
                     input_path: file_path.clone(),
                     output_path: out_path.clone(),
                     package: false,
-                    quality: options.quality,
-                    lossless: options.lossless,
-                    overwrite: options.overwrite,
-                    pages: options.pages.clone(),
-                    dpi: options.dpi,
-                    width: options.width,
-                    height: options.height,
-                    no_upscale: options.no_upscale,
-                    theme: options.theme.clone(),
-                    paper_size: options.paper_size.clone(),
-                    margin: options.margin.clone(),
-                    font_family: options.font_family.clone(),
-                    header: options.header.clone(),
-                    footer: options.footer.clone(),
-                    no_page_numbers: options.no_page_numbers,
-                    toc: options.toc,
+                    ..options.base.clone()
                 };
 
                 match crate::converter::convert(from_fmt, *target_fmt, &input_bytes, &convert_opts)

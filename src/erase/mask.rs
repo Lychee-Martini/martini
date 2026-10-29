@@ -1,12 +1,5 @@
 use image::{GrayImage, Luma};
 
-#[derive(Debug, Clone)]
-pub struct LocalizedMask {
-    pub mask: GrayImage,
-    pub bounding_box: Option<(u32, u32, u32, u32)>, // (x, y, width, height)
-    pub matched: bool,
-}
-
 /// Dilates positive mask pixels (255) by `radius` pixels using a Euclidean distance kernel
 pub fn dilate_mask(mask: &GrayImage, radius: u32) -> GrayImage {
     if radius == 0 {
@@ -109,8 +102,7 @@ pub fn compute_bounding_box(mask: &GrayImage, padding: u32) -> Option<(u32, u32,
     Some((x, y, w, h))
 }
 
-/// Dilates a grayscale image with a separable square kernel of radius `radius`
-pub fn grayscale_dilate(img: &GrayImage, radius: u32) -> GrayImage {
+fn grayscale_morph(img: &GrayImage, radius: u32, init: u8, op: fn(u8, u8) -> u8) -> GrayImage {
     if radius == 0 {
         return img.clone();
     }
@@ -122,14 +114,8 @@ pub fn grayscale_dilate(img: &GrayImage, radius: u32) -> GrayImage {
         for x in 0..w {
             let x_start = (x as i32 - r).max(0) as u32;
             let x_end = (x as i32 + r).min(w as i32 - 1) as u32;
-            let mut max_val = 0u8;
-            for nx in x_start..=x_end {
-                let v = img.get_pixel(nx, y)[0];
-                if v > max_val {
-                    max_val = v;
-                }
-            }
-            tmp.put_pixel(x, y, Luma([max_val]));
+            let val = (x_start..=x_end).fold(init, |acc, nx| op(acc, img.get_pixel(nx, y)[0]));
+            tmp.put_pixel(x, y, Luma([val]));
         }
     }
 
@@ -138,59 +124,19 @@ pub fn grayscale_dilate(img: &GrayImage, radius: u32) -> GrayImage {
         let y_start = (y as i32 - r).max(0) as u32;
         let y_end = (y as i32 + r).min(h as i32 - 1) as u32;
         for x in 0..w {
-            let mut max_val = 0u8;
-            for ny in y_start..=y_end {
-                let v = tmp.get_pixel(x, ny)[0];
-                if v > max_val {
-                    max_val = v;
-                }
-            }
-            out.put_pixel(x, y, Luma([max_val]));
+            let val = (y_start..=y_end).fold(init, |acc, ny| op(acc, tmp.get_pixel(x, ny)[0]));
+            out.put_pixel(x, y, Luma([val]));
         }
     }
     out
 }
 
-/// Erodes a grayscale image with a separable square kernel of radius `radius`
+pub fn grayscale_dilate(img: &GrayImage, radius: u32) -> GrayImage {
+    grayscale_morph(img, radius, 0, u8::max)
+}
+
 pub fn grayscale_erode(img: &GrayImage, radius: u32) -> GrayImage {
-    if radius == 0 {
-        return img.clone();
-    }
-    let (w, h) = img.dimensions();
-    let r = radius as i32;
-
-    let mut tmp = GrayImage::new(w, h);
-    for y in 0..h {
-        for x in 0..w {
-            let x_start = (x as i32 - r).max(0) as u32;
-            let x_end = (x as i32 + r).min(w as i32 - 1) as u32;
-            let mut min_val = 255u8;
-            for nx in x_start..=x_end {
-                let v = img.get_pixel(nx, y)[0];
-                if v < min_val {
-                    min_val = v;
-                }
-            }
-            tmp.put_pixel(x, y, Luma([min_val]));
-        }
-    }
-
-    let mut out = GrayImage::new(w, h);
-    for y in 0..h {
-        let y_start = (y as i32 - r).max(0) as u32;
-        let y_end = (y as i32 + r).min(h as i32 - 1) as u32;
-        for x in 0..w {
-            let mut min_val = 255u8;
-            for ny in y_start..=y_end {
-                let v = tmp.get_pixel(x, ny)[0];
-                if v < min_val {
-                    min_val = v;
-                }
-            }
-            out.put_pixel(x, y, Luma([min_val]));
-        }
-    }
-    out
+    grayscale_morph(img, radius, 255, u8::min)
 }
 
 /// Detects high-contrast text and thin overlay annotations (strokes, watermarks, dimensions)

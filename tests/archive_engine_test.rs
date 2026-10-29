@@ -1,12 +1,11 @@
-use martini::converter::ConvertOptions;
-use martini::converter::engine::archive::ArchiveEngine;
+use martini::converter::Format;
+use martini::converter::engine::archive::convert_archive;
 use std::fs;
 use std::io::Read;
 use tempfile::tempdir;
 
 #[test]
 fn test_tar_to_zip_conversion() {
-    let engine = ArchiveEngine;
     let dir = tempdir().unwrap();
     let tar_file = dir.path().join("archive.tar");
     let zip_file = dir.path().join("archive.zip");
@@ -22,8 +21,7 @@ fn test_tar_to_zip_conversion() {
         .unwrap();
     tar_builder.finish().unwrap();
 
-    let opt = ConvertOptions::default();
-    let meta = engine.convert(&tar_file, &zip_file, &opt).unwrap();
+    let meta = convert_archive(&tar_file, &zip_file, Format::Tar, Format::Zip).unwrap();
     assert!(meta.size_bytes > 0);
 
     // Verify zip contains hello.txt
@@ -37,7 +35,6 @@ fn test_tar_to_zip_conversion() {
 
 #[test]
 fn test_zip_to_targz_conversion() {
-    let engine = ArchiveEngine;
     let dir = tempdir().unwrap();
     let zip_file = dir.path().join("source.zip");
     let targz_file = dir.path().join("dest.tar.gz");
@@ -54,8 +51,7 @@ fn test_zip_to_targz_conversion() {
         zip.finish().unwrap();
     }
 
-    let opt = ConvertOptions::default();
-    let meta = engine.convert(&zip_file, &targz_file, &opt).unwrap();
+    let meta = convert_archive(&zip_file, &targz_file, Format::Zip, Format::Gz).unwrap();
     assert!(meta.size_bytes > 0);
     assert!(targz_file.exists());
 }

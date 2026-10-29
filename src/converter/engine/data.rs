@@ -1,65 +1,38 @@
-use crate::converter::{ConvertOptions, Format, OutputFileMetadata};
+use crate::converter::{Format, OutputFileMetadata};
 use crate::error::MartiniError;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-pub struct DataEngine;
+pub fn can_convert(from: Format, to: Format) -> bool {
+    from != to
+        && matches!(
+            from,
+            Format::Json | Format::Yaml | Format::Toml | Format::Csv | Format::Tsv
+        )
+        && matches!(
+            to,
+            Format::Json | Format::Yaml | Format::Toml | Format::Csv | Format::Tsv
+        )
+}
 
-impl DataEngine {
-    pub fn can_convert(from: Format, to: Format) -> bool {
-        from != to
-            && matches!(
-                from,
-                Format::Json | Format::Yaml | Format::Toml | Format::Csv | Format::Tsv
-            )
-            && matches!(
-                to,
-                Format::Json | Format::Yaml | Format::Toml | Format::Csv | Format::Tsv
-            )
-    }
+pub fn convert_slice(
+    input_data: &[u8],
+    output: &Path,
+    from: Format,
+    to: Format,
+) -> Result<OutputFileMetadata, MartiniError> {
+    let value = read_data_from_slice(input_data, from)?;
+    write_data(&value, output, to)?;
 
-    pub fn convert(
-        &self,
-        input: &Path,
-        output: &Path,
-        _options: &ConvertOptions,
-    ) -> Result<OutputFileMetadata, MartiniError> {
-        let from = Format::from_path(input)?;
-        let to = Format::from_path(output)?;
-        self.convert_with_formats(input, output, from, to)
-    }
+    let metadata = fs::metadata(output).map_err(MartiniError::Io)?;
 
-    pub fn convert_with_formats(
-        &self,
-        input: &Path,
-        output: &Path,
-        from: Format,
-        to: Format,
-    ) -> Result<OutputFileMetadata, MartiniError> {
-        let bytes = fs::read(input).map_err(MartiniError::Io)?;
-        self.convert_slice(&bytes, output, from, to)
-    }
-
-    pub fn convert_slice(
-        &self,
-        input_data: &[u8],
-        output: &Path,
-        from: Format,
-        to: Format,
-    ) -> Result<OutputFileMetadata, MartiniError> {
-        let value = read_data_from_slice(input_data, from)?;
-        write_data(&value, output, to)?;
-
-        let metadata = fs::metadata(output).map_err(MartiniError::Io)?;
-
-        Ok(OutputFileMetadata {
-            path: output.to_string_lossy().to_string(),
-            size_bytes: metadata.len(),
-            description: format!("Converted from {} to {} using DataEngine", from, to),
-        })
-    }
+    Ok(OutputFileMetadata {
+        path: output.to_string_lossy().to_string(),
+        size_bytes: metadata.len(),
+        description: format!("Converted from {} to {} using DataEngine", from, to),
+    })
 }
 
 fn read_data_from_slice(bytes: &[u8], format: Format) -> Result<Value, MartiniError> {

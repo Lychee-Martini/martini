@@ -3,10 +3,12 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 pub mod batch;
-pub mod engine;
+pub mod engine {
+    pub mod archive;
+    pub mod data;
+}
 pub mod image_conv;
 pub mod md_conv;
-pub mod md_pdf;
 pub mod md_to_typst;
 pub mod pdf_conv;
 pub mod typst_engine;
@@ -73,19 +75,6 @@ impl FromStr for Format {
             "qoi" => Ok(Format::Qoi),
             _ => Err(format!("Unsupported format: '{}'", s)),
         }
-    }
-}
-
-impl Format {
-    pub fn from_path(path: &std::path::Path) -> Result<Self, MartiniError> {
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        Self::from_str(&ext).map_err(|_| MartiniError::InvalidInputData {
-            reason: format!("Unsupported format extension: '{}'", ext),
-        })
     }
 }
 
@@ -356,7 +345,7 @@ pub fn convert(
     options: &ConvertOptions,
 ) -> Result<ConversionResult, MartiniError> {
     if from == Format::Md && to == Format::Pdf {
-        md_pdf::convert_markdown_to_pdf(input_data, options)
+        md_to_typst::convert_markdown_to_pdf(input_data, options)
     } else if from == Format::Md && to == Format::Docx {
         md_conv::convert_markdown(input_data, options)
     } else if from == Format::Pdf {
@@ -366,15 +355,14 @@ pub fn convert(
             from: from.to_string(),
             to: to.to_string(),
         })
-    } else if engine::data::DataEngine::can_convert(from, to) {
-        let meta =
-            engine::data::DataEngine.convert_slice(input_data, &options.output_path, from, to)?;
+    } else if engine::data::can_convert(from, to) {
+        let meta = engine::data::convert_slice(input_data, &options.output_path, from, to)?;
         Ok(ConversionResult {
             from,
             to,
             output_files: vec![meta],
         })
-    } else if engine::archive::ArchiveEngine::can_convert(from, to) {
+    } else if engine::archive::can_convert(from, to) {
         let (input_path, _temp_file) = if options.input_path.exists() {
             (options.input_path.clone(), None)
         } else {
@@ -391,12 +379,7 @@ pub fn convert(
             let path = temp.path().to_path_buf();
             (path, Some(temp))
         };
-        let meta = engine::archive::ArchiveEngine.convert_with_formats(
-            &input_path,
-            &options.output_path,
-            from,
-            to,
-        )?;
+        let meta = engine::archive::convert_archive(&input_path, &options.output_path, from, to)?;
         Ok(ConversionResult {
             from,
             to,

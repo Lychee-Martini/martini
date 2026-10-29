@@ -1,72 +1,41 @@
-use crate::converter::{ConvertOptions, Format, OutputFileMetadata};
+use crate::converter::{Format, OutputFileMetadata};
 use crate::error::MartiniError;
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 
-pub struct ArchiveEngine;
-
-impl ArchiveEngine {
-    pub fn can_convert(from: Format, to: Format) -> bool {
-        from != to
-            && matches!(from, Format::Zip | Format::Tar | Format::Gz)
-            && matches!(to, Format::Zip | Format::Tar | Format::Gz)
-    }
-
-    pub fn convert(
-        &self,
-        input: &Path,
-        output: &Path,
-        _options: &ConvertOptions,
-    ) -> Result<OutputFileMetadata, MartiniError> {
-        let from = detect_archive_format(input);
-        let to = detect_archive_format(output);
-        self.convert_with_formats(input, output, from, to)
-    }
-
-    pub fn convert_with_formats(
-        &self,
-        input: &Path,
-        output: &Path,
-        from: Format,
-        to: Format,
-    ) -> Result<OutputFileMetadata, MartiniError> {
-        let temp_dir = tempdir().map_err(MartiniError::Io)?;
-        extract_archive(input, temp_dir.path(), from)?;
-
-        if let Some(parent) = output.parent() {
-            fs::create_dir_all(parent).map_err(MartiniError::Io)?;
-        }
-
-        create_archive(temp_dir.path(), output, to)?;
-
-        let metadata = fs::metadata(output).map_err(MartiniError::Io)?;
-
-        Ok(OutputFileMetadata {
-            path: output.to_string_lossy().to_string(),
-            size_bytes: metadata.len(),
-            description: format!("Converted from {} to {} using ArchiveEngine", from, to),
-        })
-    }
+pub fn can_convert(from: Format, to: Format) -> bool {
+    from != to
+        && matches!(from, Format::Zip | Format::Tar | Format::Gz)
+        && matches!(to, Format::Zip | Format::Tar | Format::Gz)
 }
 
-pub fn detect_archive_format(path: &Path) -> Format {
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    if name.ends_with(".tar.gz") || name.ends_with(".tgz") || name.ends_with(".gz") {
-        Format::Gz
-    } else if name.ends_with(".tar") {
-        Format::Tar
-    } else {
-        Format::Zip
+pub fn convert_archive(
+    input: &Path,
+    output: &Path,
+    from: Format,
+    to: Format,
+) -> Result<OutputFileMetadata, MartiniError> {
+    let temp_dir = tempdir().map_err(MartiniError::Io)?;
+    extract_archive(input, temp_dir.path(), from)?;
+
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(MartiniError::Io)?;
     }
+
+    create_archive(temp_dir.path(), output, to)?;
+
+    let metadata = fs::metadata(output).map_err(MartiniError::Io)?;
+
+    Ok(OutputFileMetadata {
+        path: output.to_string_lossy().to_string(),
+        size_bytes: metadata.len(),
+        description: format!("Converted from {} to {} using ArchiveEngine", from, to),
+    })
 }
 
 fn extract_archive(
@@ -151,9 +120,7 @@ fn create_archive(src_dir: &Path, out_file: &Path, format: Format) -> Result<(),
                         reason: format!("Failed to write ZIP entry header: {}", e),
                     })?;
                 let mut f = fs::File::open(&abs_path).map_err(MartiniError::Io)?;
-                let mut buf = Vec::new();
-                f.read_to_end(&mut buf).map_err(MartiniError::Io)?;
-                zip.write_all(&buf).map_err(MartiniError::Io)?;
+                io::copy(&mut f, &mut zip).map_err(MartiniError::Io)?;
             }
 
             zip.finish().map_err(|e| MartiniError::OutputWrite {

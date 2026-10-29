@@ -326,6 +326,28 @@ fn run(mut args: CliArgs) -> Result<i32, MartiniError> {
                 })?]
             };
 
+            let base_options = ConvertOptions {
+                input_path: input_resolved.clone(),
+                output_path: std::path::PathBuf::new(),
+                package,
+                quality,
+                lossless,
+                overwrite,
+                pages,
+                dpi,
+                width,
+                height,
+                no_upscale,
+                theme,
+                paper_size,
+                margin,
+                font_family,
+                header,
+                footer,
+                no_page_numbers,
+                toc,
+            };
+
             if is_dir {
                 // Batch directory conversion
                 if !args.json && !args.quiet {
@@ -380,26 +402,11 @@ fn run(mut args: CliArgs) -> Result<i32, MartiniError> {
                     output_dir: output.clone(),
                     from_filter: from.clone(),
                     targets: targets.clone(),
-                    quality,
-                    lossless,
                     recursive,
-                    overwrite,
                     delete_original,
                     workers,
-                    pages: pages.clone(),
-                    dpi,
                     files: glob_files,
-                    width,
-                    height,
-                    no_upscale,
-                    theme: theme.clone(),
-                    paper_size: paper_size.clone(),
-                    margin: margin.clone(),
-                    font_family: font_family.clone(),
-                    header: header.clone(),
-                    footer: footer.clone(),
-                    no_page_numbers,
-                    toc,
+                    base: base_options,
                 };
 
                 let batch_result = batch_convert(batch_options, Some(&pb))?;
@@ -507,25 +514,8 @@ fn run(mut args: CliArgs) -> Result<i32, MartiniError> {
                     }
 
                     let options = ConvertOptions {
-                        input_path: input_resolved.clone(),
                         output_path: out_path.clone(),
-                        package,
-                        quality,
-                        lossless,
-                        overwrite,
-                        pages: pages.clone(),
-                        dpi,
-                        width,
-                        height,
-                        no_upscale,
-                        theme: theme.clone(),
-                        paper_size: paper_size.clone(),
-                        margin: margin.clone(),
-                        font_family: font_family.clone(),
-                        header: header.clone(),
-                        footer: footer.clone(),
-                        no_page_numbers,
-                        toc,
+                        ..base_options.clone()
                     };
 
                     info!("Starting conversion to {}...", target_fmt);

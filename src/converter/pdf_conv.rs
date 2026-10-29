@@ -142,25 +142,10 @@ pub fn convert_pdf(
         let page_output_path = options.output_path.with_file_name(page_filename);
 
         let page_options = ConvertOptions {
-            input_path: options.input_path.clone(),
-            output_path: page_output_path.clone(),
+            output_path: page_output_path,
             package: false,
-            quality: options.quality,
-            lossless: options.lossless,
-            overwrite: options.overwrite,
             pages: None,
-            dpi: options.dpi,
-            width: options.width,
-            height: options.height,
-            no_upscale: options.no_upscale,
-            theme: options.theme.clone(),
-            paper_size: options.paper_size.clone(),
-            margin: options.margin.clone(),
-            font_family: options.font_family.clone(),
-            header: options.header.clone(),
-            footer: options.footer.clone(),
-            no_page_numbers: options.no_page_numbers,
-            toc: options.toc,
+            ..options.clone()
         };
 
         // Encode to target format
