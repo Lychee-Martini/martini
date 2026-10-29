@@ -1,6 +1,7 @@
 use crate::converter::{ConversionResult, ConvertOptions};
 use crate::error::MartiniError;
 
+pub mod extract;
 pub mod font;
 pub mod ir;
 pub mod writer;
