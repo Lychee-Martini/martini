@@ -27,38 +27,47 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux Targets
+          # Linux Targets (pure CPU neural inpainting, zero external CUDA runtime dependencies)
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             suffix: x86_64-linux-gnu
+            features: nn-cpu
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             suffix: x86_64-linux-musl
+            features: nn-cpu
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             suffix: aarch64-linux-gnu
+            features: nn-cpu
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             suffix: aarch64-linux-musl
+            features: nn-cpu
 
           # macOS Targets
           - target: x86_64-apple-darwin
             os: macos-latest
             suffix: x86_64-macos
+            features: nn-cpu
           - target: aarch64-apple-darwin
             os: macos-latest
             suffix: aarch64-macos
+            features: nn-cpu
 
           # Windows Targets
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             suffix: x86_64-windows
+            features: nn-cpu
           - target: i686-pc-windows-msvc
             os: windows-latest
             suffix: i386-windows
+            features: ''
           - target: aarch64-pc-windows-msvc
             os: windows-latest
             suffix: aarch64-windows
+            features: nn-cpu
 
     steps:
       - name: Checkout Source Code
@@ -79,6 +88,60 @@ jobs:
         with:
           bin: martini
           target: ${{ matrix.target }}
+          features: ${{ matrix.features || '' }}
+          archive: martini-$tag-${{ matrix.suffix }}
+          include: README.md,LICENSE
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-cuda-assets:
+    name: Build & Upload CUDA (${{ matrix.target }})
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    env:
+      # Target Turing (sm_75) PTX baseline so NVIDIA Driver JIT runs across RTX 20/30/40/50+ GPUs
+      # without requiring nvidia-smi hardware detection on headless CI runners.
+      CUDA_COMPUTE_CAP: "75"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            suffix: x86_64-linux-gnu-cuda
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            suffix: x86_64-windows-cuda
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Configure MSVC Developer Environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: '12.8.1'
+          method: 'network'
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}-cuda
+
+      - name: Upload CUDA Rust Binary to Release
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: martini
+          target: ${{ matrix.target }}
+          features: cuda
           archive: martini-$tag-${{ matrix.suffix }}
           include: README.md,LICENSE
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -111,7 +174,7 @@ jobs:
           key: linux-musl-packages
 
       - name: Build musl binary
-        run: cargo build --release --target x86_64-unknown-linux-musl
+        run: cargo build --release --target x86_64-unknown-linux-musl --features nn-cpu
 
       - name: Prepare Binary and Output Directory
         run: |
@@ -144,7 +207,7 @@ jobs:
 
   publish-release:
     name: Publish Release
-    needs: [upload-assets, package-linux]
+    needs: [upload-assets, upload-cuda-assets, package-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Mark Release as Published
@@ -231,18 +294,27 @@ jobs:
     name: Distribute to WinGet
     needs: publish-release
     runs-on: windows-latest
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
     steps:
       - name: Publish to WinGet
         if: env.WINGET_TOKEN != ''
-        env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         uses: vedantmgoyal2009/winget-releaser@v2
         with:
           identifier: LycheeMartini.Martini
+          installers-regex: '-(x86_64|aarch64|i386)-windows\.zip$'
+          token: ${{ secrets.WINGET_TOKEN }}
+
+      - name: Publish CUDA Edition to WinGet
+        if: env.WINGET_TOKEN != ''
+        # Prevent workflow failure if triggered before the initial LycheeMartini.Martini.CUDA registration PR is merged
+        continue-on-error: true
+        uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: LycheeMartini.Martini.CUDA
+          installers-regex: '-x86_64-windows-cuda\.zip$'
           token: ${{ secrets.WINGET_TOKEN }}
 
       - name: Inform if WINGET_TOKEN is not set
         if: env.WINGET_TOKEN == ''
-        env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: Write-Host "::warning ::WINGET_TOKEN is not configured in repository secrets. Skipping WinGet submission."

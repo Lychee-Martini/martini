@@ -40,33 +40,46 @@
 .PARAMETER SkipValidation
     Switch to skip local `winget validate` validation.
 
+.PARAMETER Cuda
+    Switch to generate and publish manifests for the CUDA GPU-accelerated edition
+    (defaults PackageIdentifier to 'LycheeMartini.Martini.CUDA' targeting *-x86_64-windows-cuda.zip).
+
 .EXAMPLE
     # 1. Generate and validate manifests locally for the current version:
     .\publish-winget.ps1
 
 .EXAMPLE
-    # 2. Test manifest generation against an existing release (e.g. v0.1.0):
+    # 2. Generate and validate manifests for the CUDA edition:
+    .\publish-winget.ps1 -Cuda
+
+.EXAMPLE
+    # 3. Test manifest generation against an existing release (e.g. v0.1.0):
     .\publish-winget.ps1 -Version 0.1.0
 
 .EXAMPLE
-    # 3. Submit PR to microsoft/winget-pkgs using Lychee-Martini fork:
+    # 4. Submit PR to microsoft/winget-pkgs using Lychee-Martini fork:
     .\publish-winget.ps1 -Submit -Token "ghp_xxxx"
 #>
 
 [CmdletBinding()]
 param(
     [string]$Version,
-    [string]$PackageIdentifier = "LycheeMartini.Martini",
+    [string]$PackageIdentifier,
     [string]$ForkOwner = "Lychee-Martini",
     [string]$Repo = "Lychee-Martini/martini",
     [string]$OutputDir = "target/winget-manifests",
     [string]$Token,
+    [switch]$Cuda,
     [switch]$Submit,
     [switch]$OpenPR,
     [switch]$SkipValidation
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $PackageIdentifier) {
+    $PackageIdentifier = if ($Cuda) { "LycheeMartini.Martini.CUDA" } else { "LycheeMartini.Martini" }
+}
 
 # 1. Resolve Token if not passed as argument
 if (-not $Token) {
@@ -102,14 +115,15 @@ Write-Host " Repository: https://github.com/$Repo" -ForegroundColor Yellow
 Write-Host " Fork Owner: $ForkOwner (https://github.com/$ForkOwner/winget-pkgs)" -ForegroundColor Yellow
 Write-Host "==========================================================" -ForegroundColor Green
 
-# 3. Create manifest directory structure: manifests/<first_char>/<Publisher>/<PackageName>/<Version>/
+# 3. Create manifest directory structure: manifests/<first_char>/<Publisher>/<Package>/<SubPackage>/<Version>/
 # e.g.: target/winget-manifests/l/LycheeMartini/Martini/0.1.2/
+#   or: target/winget-manifests/l/LycheeMartini/Martini/CUDA/0.1.2/
 $parts = $PackageIdentifier.Split('.')
 $publisher = $parts[0]
-$packageName = if ($parts.Length -gt 1) { $parts[1] } else { $parts[0] }
+$idPath = $PackageIdentifier -replace '\.', '/'
 $firstChar = $publisher.Substring(0, 1).ToLower()
 
-$manifestSubDir = "$firstChar/$publisher/$packageName/$cleanVersion"
+$manifestSubDir = "$firstChar/$idPath/$cleanVersion"
 $targetManifestDir = Join-Path $OutputDir $manifestSubDir
 
 if (Test-Path $targetManifestDir) {
@@ -135,20 +149,29 @@ try {
     Write-Warning "Could not fetch release $tag from GitHub API ($($_.Exception.Message))."
 }
 
-$architectures = @(
-    @{
-        Arch = "x64"
-        Suffix = "x86_64-windows.zip"
-    },
-    @{
-        Arch = "x86"
-        Suffix = "i386-windows.zip"
-    },
-    @{
-        Arch = "arm64"
-        Suffix = "aarch64-windows.zip"
-    }
-)
+$architectures = if ($Cuda) {
+    @(
+        @{
+            Arch = "x64"
+            Suffix = "x86_64-windows-cuda.zip"
+        }
+    )
+} else {
+    @(
+        @{
+            Arch = "x64"
+            Suffix = "x86_64-windows.zip"
+        },
+        @{
+            Arch = "x86"
+            Suffix = "i386-windows.zip"
+        },
+        @{
+            Arch = "arm64"
+            Suffix = "aarch64-windows.zip"
+        }
+    )
+}
 
 $tempDir = Join-Path $env:TEMP "martini-winget-$cleanVersion"
 if (-not (Test-Path $tempDir)) {
@@ -214,9 +237,10 @@ foreach ($item in $architectures) {
 if ($installersList.Count -eq 0) {
     Write-Warning "No Windows release binaries were found online or locally for $tag."
     Write-Host "Using placeholder SHA256 hashes for manifest scaffolding..." -ForegroundColor Yellow
+    $placeholderSuffix = if ($Cuda) { "x86_64-windows-cuda.zip" } else { "x86_64-windows.zip" }
     $installersList.Add([PSCustomObject]@{
         Arch = "x64"
-        Url = "https://github.com/$Repo/releases/download/$tag/martini-$tag-x86_64-windows.zip"
+        Url = "https://github.com/$Repo/releases/download/$tag/martini-$tag-$placeholderSuffix"
         Sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
     })
 }
@@ -238,6 +262,26 @@ ManifestVersion: 1.6.0
 Set-Content -Path $versionYamlPath -Value $versionYaml -Encoding UTF8
 
 # 5.2 Locale Manifest
+$displayPackageName = if ($Cuda) { "Martini (CUDA)" } else { "Martini" }
+$shortDesc = if ($Cuda) {
+    "CUDA GPU-accelerated edition of Martini CLI format converter and neural inpainter (requires CUDA 12.x Runtime)."
+} else {
+    "A modern, extensible CLI format converter built in Rust and optimized for Agent Skills."
+}
+$longDesc = if ($Cuda) {
+    "Martini (CUDA Edition) is a high-performance CLI document, data, and image converter with NVIDIA CUDA GPU acceleration for local neural object and watermark erasure. Requires NVIDIA GPU driver and CUDA 12.x Runtime libraries."
+} else {
+    "Martini is a high-performance, format-flexible CLI document, data, and image converter designed for developers and AI agent tool chains."
+}
+$monikerName = if ($Cuda) { "martini-cuda" } else { "martini" }
+$extraTags = if ($Cuda) {
+@"
+
+  - cuda
+  - gpu
+"@
+} else { "" }
+
 $localeYamlPath = Join-Path $targetManifestDir "$PackageIdentifier.locale.en-US.yaml"
 $localeYaml = @"
 # yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
@@ -248,19 +292,19 @@ PackageLocale: en-US
 Publisher: Lychee Martini
 PublisherUrl: https://lycheemartini.com
 PublisherSupportUrl: https://github.com/$Repo/issues
-PackageName: Martini
+PackageName: $displayPackageName
 PackageUrl: https://github.com/$Repo
 License: Apache-2.0
 LicenseUrl: https://github.com/$Repo/blob/main/LICENSE
-ShortDescription: A modern, extensible CLI format converter built in Rust and optimized for Agent Skills.
-Description: Martini is a high-performance, format-flexible CLI document, data, and image converter designed for developers and AI agent tool chains.
-Moniker: martini
+ShortDescription: $shortDesc
+Description: $longDesc
+Moniker: $monikerName
 Tags:
   - cli
   - converter
   - image
   - pdf
-  - markdown
+  - markdown$extraTags
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
 "@
@@ -371,8 +415,8 @@ if ($Submit) {
     $masterRef = Invoke-RestMethod -Uri "https://api.github.com/repos/$ForkOwner/winget-pkgs/git/ref/heads/master" -Headers $authHeaders -Method Get
     $masterSha = $masterRef.object.sha
 
-    # Step 7.4 Create branch: martini-$cleanVersion
-    $branchName = "martini-$cleanVersion"
+    # Step 7.4 Create branch: martini-$cleanVersion (or martini-cuda-$cleanVersion)
+    $branchName = if ($Cuda) { "martini-cuda-$cleanVersion" } else { "martini-$cleanVersion" }
     Write-Host "==> Creating branch '$branchName' from master ($($masterSha.Substring(0,7)))..." -ForegroundColor Cyan
     try {
         $createBranchUri = "https://api.github.com/repos/$ForkOwner/winget-pkgs/git/refs"
@@ -440,7 +484,7 @@ if ($Submit) {
 - **Package Identifier:** $PackageIdentifier
 - **Package Version:** $cleanVersion
 - **Publisher:** Lychee Martini
-- **Description:** A modern, extensible CLI format converter built in Rust and optimized for Agent Skills.
+- **Description:** $shortDesc
 - **Repository:** https://github.com/$Repo
 
 Manifests generated and validated via Martini automation pipeline.
@@ -476,10 +520,11 @@ Manifests generated and validated via Martini automation pipeline.
     Write-Host "==> Manifest generation and validation complete!" -ForegroundColor Green
     Write-Host "    Manifests saved to: $targetManifestDir" -ForegroundColor Yellow
     Write-Host ""
+    $cudaFlagHint = if ($Cuda) { " -Cuda" } else { "" }
     Write-Host "Next steps:" -ForegroundColor Cyan
     Write-Host "  1. To automatically submit a PR to microsoft/winget-pkgs from https://github.com/$ForkOwner/winget-pkgs:" -ForegroundColor Gray
-    Write-Host "     .\publish-winget.ps1 -Submit -Token <GitHub_PAT>" -ForegroundColor White
+    Write-Host "     .\publish-winget.ps1$cudaFlagHint -Submit -Token <GitHub_PAT>" -ForegroundColor White
     Write-Host "  2. Or test and submit using wingetcreate if preferred:" -ForegroundColor Gray
-    Write-Host "     wingetcreate submit target\winget-manifests\$manifestSubDir" -ForegroundColor White
+    Write-Host "     wingetcreate submit $($targetManifestDir -replace '/', '\')" -ForegroundColor White
     Write-Host ""
 }
