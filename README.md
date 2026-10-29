@@ -18,6 +18,13 @@ A modern, extensible, and high-performance CLI format converter written in Rust.
 - 📝 **Markdown to PDF & Word (DOCX)**:
   - **Pure Rust Markdown to PDF**: Powered by an embedded `typst` typesetting engine with zero external dependencies. Supports auto-detection of CJK system fonts (Microsoft YaHei, PingFang SC, Noto Sans CJK), customizable themes (`github`, `academic`, `modern`, `minimal`), paper sizes (A4, Letter, A3, A5), margins, headers/footers, page numbers, automatic table of contents (`--toc`), syntax-highlighted code blocks, GFM tables, and LaTeX math formulas.
   - **Markdown to DOCX**: Convert Markdown files directly to Microsoft Word (`.docx`) files natively.
+- 📽️ **PDF to Editable PowerPoint Presentation (`.pptx`)**:
+  - **Pure Rust In-Process Slide Reconstruction**: Reconstructs presentations directly from PDF vector display lists into clean, native OpenXML (`.pptx`) presentation decks without LibreOffice, MS Office, or Python dependencies.
+  - **Editable Paragraph Reflow & Text Alignment**: Clusters fragmented PDF glyphs into semantic text boxes with natural word-wrapping, multi-line paragraph reflow, standard CJK/Western font family preservation, and 90°/270° vertical text orientation.
+  - **Native Live Charts with Embedded Excel (`rust_xlsxwriter`)**: Detects bar, column, and line chart structures from vector primitives and generates genuine PowerPoint DrawingML charts backed by an embedded `Microsoft_Excel_Worksheet.xlsx`. Modifying values in Microsoft PowerPoint or WPS updates the chart visuals automatically.
+  - **Native Ruled Table Detection**: Reconstructs grid lines and cell text into native PowerPoint tables (`a:tbl`).
+  - **Vector Shapes & Alpha Transparency**: Preserves vector rectangles, polygons, outlines, fills, and extracts raster images with soft masks / alpha channels.
+  - **Smart Scanned Page Raster Fallback**: Automatically falls back to high-resolution raster background slides when pages contain pure scanned images or unextractable text.
 - ⚡ **Developer-Friendly & Auto-Detecting CLI**:
   - Make `--from` optional (defaults to `"auto"` detecting from source extensions).
   - Make `--to` optional (detects target format from `--output` extension, or defaults to `pdf` for Markdown, `favicon` for SVGs, and `webp` for other images).
@@ -125,6 +132,7 @@ Supported Conversions:
 - [any] -> tiff: Convert images to TIFF format
 - [any] -> qoi: Convert images to QOI format
 - pdf -> [png/jpg/webp/avif]: Convert PDF pages to images. Options: --pages, --dpi, --quality, --lossless
+- pdf -> pptx: Convert PDF documents to editable Microsoft PowerPoint (PPTX) presentations. Options: --pages, --overwrite
 - md -> docx: Convert Markdown documents to Microsoft Word (DOCX) files. Options: --overwrite
 - md -> pdf: Convert Markdown documents to PDF files with Pure Rust engine. Options: --theme, --paper-size, --margin, --font-family, --header, --footer, --no-page-numbers, --toc, --overwrite
 - [json/yaml/toml/csv/tsv] -> [json/yaml/toml/csv/tsv]: Convert structured data between JSON, YAML, TOML, CSV, and TSV formats. Options: --overwrite
@@ -192,7 +200,31 @@ martini convert -i ./pdfs -o ./images --from pdf --to webp
 
 *Note: Output files are named with page suffixes, e.g., `output_page_1.jpg`, `output_page_2.jpg`.*
 
-### 5. Image Resizing
+### 5. Convert PDF to Editable PowerPoint (PPTX)
+
+Convert PDF presentations, reports, or slides into native, fully editable Microsoft PowerPoint (`.pptx`) decks:
+
+```bash
+# Convert PDF to editable PPTX using concise positional arguments
+martini deck.pdf deck.pptx
+# Or explicitly using -i and -o flags:
+martini convert -i presentation.pdf -o presentation.pptx
+
+# Convert specific pages (e.g. pages 1 to 5 and page 8)
+martini convert -i annual_report.pdf -o slides.pptx --pages "1-5,8"
+
+# Overwrite existing PPTX presentation
+martini convert -i deck.pdf -o deck.pptx --overwrite
+```
+
+**Key Capabilities:**
+- **Editable Textboxes**: Fragmented PDF text items are clustered into semantic paragraphs with natural reflow, font styles (bold/italic/CJK fallbacks), and vertical text orientation (90° / 270°).
+- **Native Live Charts**: Bar, column, and line charts are reconstructed as native DrawingML charts with an embedded Excel workbook (`Microsoft_Excel_Worksheet.xlsx`). Editing numbers in PowerPoint or WPS dynamically updates the chart graphics.
+- **Native Tables**: Ruled lines and cell contents are transformed into PowerPoint tables (`a:tbl`) rather than loose shapes.
+- **Vector Graphics & Transparency**: Shapes, fills, borders, and PNG/JPEG images with alpha channel transparency are preserved.
+- **Scanned Page Fallback**: Pages detected as pure raster scans automatically render into high-resolution slide backgrounds without data loss.
+
+### 6. Image Resizing
 
 Resize standard images, SVG vector images, or PDF pages on conversion:
 
@@ -207,7 +239,7 @@ martini convert -i logo.svg -o output.png --width 500 --height 500
 martini convert -i small.jpg -o output.jpg --height 300 --no-upscale
 ```
 
-### 6. Convert Markdown to PDF
+### 7. Convert Markdown to PDF
 
 Convert Markdown files (`.md`, `.markdown`) directly to high-fidelity PDF documents with the embedded Pure Rust Typst engine:
 
@@ -225,7 +257,7 @@ martini convert -i report.md -o report.pdf --margin 15mm --header "Internal Repo
 martini convert -i paper.md -o paper.pdf --theme academic
 ```
 
-### 7. Convert Markdown to Word (DOCX)
+### 8. Convert Markdown to Word (DOCX)
 
 Convert Markdown files directly to Microsoft Word (`.docx`) files:
 
@@ -240,7 +272,7 @@ LaTeX math equations (enclosed in `$` for inline math or `$$` for display math) 
 $$DCF = \sum_{t=1}^{n} \frac{FCF_t}{(1+WACC)^t} + \frac{FCF_n \times (1+g)}{(WACC - g) \times (1+WACC)^n}$$
 ```
 
-### 8. Transcode Structured Data (JSON / YAML / TOML / CSV / TSV)
+### 9. Transcode Structured Data (JSON / YAML / TOML / CSV / TSV)
 
 Convert between popular configuration and tabular data formats with automatic schema inference and column union:
 
@@ -267,7 +299,7 @@ martini data.csv data.json
 martini convert data.json --to yaml
 ```
 
-### 9. Archive Transcoding & Extraction (ZIP / TAR / TAR.GZ)
+### 10. Archive Transcoding & Extraction (ZIP / TAR / TAR.GZ)
 
 Transcode between archive formats without intermediate disk clutter, or extract with path traversal sanitization:
 
@@ -294,7 +326,7 @@ martini convert -i release.zip -o ./dist
 martini convert -i ./dist -o release.zip
 ```
 
-### 10. Extended Image Formats (BMP, TIFF, QOI)
+### 11. Extended Image Formats (BMP, TIFF, QOI)
 
 Full support for legacy and modern lightweight raster image formats:
 
@@ -306,7 +338,7 @@ martini convert -i asset.png -o asset.qoi
 martini convert -i scan.tiff -o scan.webp
 ```
 
-### 11. Presets Management (`martini preset`)
+### 12. Presets Management (`martini preset`)
 
 Manage reusable conversion presets across personal workflows and team projects:
 
@@ -336,7 +368,7 @@ paper_size = "a4"
 toc = true
 ```
 
-### 12. Automated Directory Watching (`martini watch`)
+### 13. Automated Directory Watching (`martini watch`)
 
 Run Martini as a headless background daemon to monitor incoming files and auto-convert them to an outbox directory:
 
@@ -354,7 +386,7 @@ martini watch -i ./inbox -o ./outbox --to webp --delete-original
 martini watch -i ./inbox -o ./outbox --to webp --move-originals ./processed
 ```
 
-### 13. Erase Objects & Watermarks (`martini erase`)
+### 14. Erase Objects & Watermarks (`martini erase`)
 
 Erase unwanted objects, text, watermarks, or persons from images using natural language prompts or custom binary masks:
 
