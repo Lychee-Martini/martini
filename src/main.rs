@@ -134,6 +134,7 @@ fn run(mut args: CliArgs) -> Result<i32, MartiniError> {
                         "jpg" => ". Options: --quality",
                         "webp" | "avif" | "both" => ". Options: --quality, --lossless",
                         "docx" => ". Options: --overwrite",
+                        "pptx" => ". Options: --pages, --overwrite",
                         "pdf" if f.from == "md" => {
                             ". Options: --theme, --paper-size, --margin, --font-family, --header, --footer, --no-page-numbers, --toc, --overwrite"
                         }

@@ -11,6 +11,7 @@ pub mod image_conv;
 pub mod md_conv;
 pub mod md_to_typst;
 pub mod pdf_conv;
+pub mod pptx;
 pub mod typst_engine;
 
 #[derive(Debug, Clone)]
@@ -32,6 +33,7 @@ pub enum Format {
     Pdf,
     Md,
     Docx,
+    Pptx,
     // Data formats
     Json,
     Yaml,
@@ -62,6 +64,7 @@ impl FromStr for Format {
             "pdf" => Ok(Format::Pdf),
             "md" | "markdown" => Ok(Format::Md),
             "docx" => Ok(Format::Docx),
+            "pptx" => Ok(Format::Pptx),
             "json" => Ok(Format::Json),
             "yaml" | "yml" => Ok(Format::Yaml),
             "toml" => Ok(Format::Toml),
@@ -90,6 +93,7 @@ impl std::fmt::Display for Format {
             Format::Pdf => write!(f, "pdf"),
             Format::Md => write!(f, "md"),
             Format::Docx => write!(f, "docx"),
+            Format::Pptx => write!(f, "pptx"),
             Format::Json => write!(f, "json"),
             Format::Yaml => write!(f, "yaml"),
             Format::Toml => write!(f, "toml"),
@@ -279,6 +283,18 @@ pub fn all_capabilities() -> Vec<FormatCapability> {
             ],
         ),
         FormatCapability::new(
+            "pdf",
+            "pptx",
+            "Convert PDF documents to editable Microsoft PowerPoint (PPTX) presentations",
+            &[
+                (
+                    "pages",
+                    "string (comma-separated page numbers or ranges, e.g. '1,3-5')",
+                ),
+                ("overwrite", "boolean (default false)"),
+            ],
+        ),
+        FormatCapability::new(
             "md",
             "docx",
             "Convert Markdown documents to Microsoft Word (DOCX) files",
@@ -344,7 +360,9 @@ pub fn convert(
     input_data: &[u8],
     options: &ConvertOptions,
 ) -> Result<ConversionResult, MartiniError> {
-    if from == Format::Md && to == Format::Pdf {
+    if from == Format::Pdf && to == Format::Pptx {
+        pptx::convert_pdf_to_pptx(input_data, options)
+    } else if from == Format::Md && to == Format::Pdf {
         md_to_typst::convert_markdown_to_pdf(input_data, options)
     } else if from == Format::Md && to == Format::Docx {
         md_conv::convert_markdown(input_data, options)

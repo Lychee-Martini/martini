@@ -90,12 +90,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 glob = "0.3"
 
-# Markdown, Typst, and Word
+# Markdown, Typst, Word, and Presentation
 docx-rs = "0.4.22"
 pulldown-cmark = "0.13.5"
 typst = "0.15.1"
 typst-pdf = "0.15.1"
 fontdb = "0.24"
+rust_xlsxwriter = "0.102.0"
 
 # Candle & Neural Inpainting (optional)
 candle-core = { version = "0.10.2", optional = true }
