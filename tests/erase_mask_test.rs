@@ -112,3 +112,72 @@ fn test_detect_text_on_sample_image() {
     assert!(diff_count > 1000);
     assert!(avg_erased > avg_orig + 50);
 }
+
+#[test]
+fn test_detect_text_rejects_colored_stems_and_background_gaps() {
+    let mut img = image::RgbImage::from_pixel(240, 180, image::Rgb([218, 218, 215]));
+
+    // Two dark green leaves/stems (high contrast > 160 against white cloth, but chromatic)
+    // separated by a 6px white cloth gap at y = 76..82
+    for y in 68..76 {
+        for x in 40..110 {
+            img.put_pixel(x, y, image::Rgb([26, 56, 24]));
+        }
+    }
+    for y in 82..90 {
+        for x in 40..110 {
+            img.put_pixel(x, y, image::Rgb([26, 56, 24]));
+        }
+    }
+
+    // Neutral black text stroke at x = 160..163, y = 120..145
+    for y in 120..145 {
+        for x in 160..163 {
+            img.put_pixel(x, y, image::Rgb([12, 12, 12]));
+        }
+    }
+
+    let dyn_img = image::DynamicImage::ImageRgb8(img);
+    let mask = martini::erase::mask::detect_text_mask(&dyn_img, 0.35);
+
+    // True black text stroke must be detected
+    assert_eq!(mask.get_pixel(161, 130)[0], 255);
+    // Dark green leaves must NOT be detected despite high contrast against cloth
+    assert_eq!(mask.get_pixel(75, 72)[0], 0);
+    assert_eq!(mask.get_pixel(75, 86)[0], 0);
+    // Narrow white cloth gap between the two dark green leaves must NOT be detected
+    assert_eq!(mask.get_pixel(75, 79)[0], 0);
+}
+
+#[test]
+fn test_compute_inpaint_rois_splits_scattered_regions() {
+    let mut mask = GrayImage::new(1024, 768);
+    // Bottom-left label (like "01")
+    for y in 660..688 {
+        for x in 136..170 {
+            mask.put_pixel(x, y, Luma([255]));
+        }
+    }
+    // Top-right label (like Chinese title)
+    for y in 60..90 {
+        for x in 883..975 {
+            mask.put_pixel(x, y, Luma([255]));
+        }
+    }
+
+    // Neural 512x512 context windows
+    let sd_rois = martini::erase::mask::compute_inpaint_rois(&mask, 512, 64);
+    assert_eq!(sd_rois.len(), 2);
+    for &(rx, ry, rw, rh) in &sd_rois {
+        assert_eq!((rw, rh), (512, 512));
+        assert!(rx + rw <= 1024);
+        assert!(ry + rh <= 768);
+    }
+
+    // Tight local boxes for fast classical mode
+    let fast_rois = martini::erase::mask::compute_inpaint_rois(&mask, 0, 16);
+    assert_eq!(fast_rois.len(), 2);
+    for &(_rx, _ry, rw, rh) in &fast_rois {
+        assert!(rw < 160 && rh < 100);
+    }
+}

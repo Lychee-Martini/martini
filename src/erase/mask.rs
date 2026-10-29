@@ -139,64 +139,26 @@ pub fn grayscale_erode(img: &GrayImage, radius: u32) -> GrayImage {
     grayscale_morph(img, radius, 255, u8::min)
 }
 
-/// Detects high-contrast text and thin overlay annotations (strokes, watermarks, dimensions)
-pub fn detect_text_mask(img: &image::DynamicImage, threshold: f32) -> GrayImage {
-    let gray = img.to_luma8();
-    let (w, h) = gray.dimensions();
+type ClusterGroup = ((u32, u32, u32, u32), Vec<(u32, u32)>);
 
-    // Structuring element radius for stroke detection (typically 4-6px captures stroke widths up to 10-12px)
-    let radius = 5u32;
-
-    // Morphological closing: dilation then erosion (fills thin dark strokes)
-    let dilated = grayscale_dilate(&gray, radius);
-    let closed = grayscale_erode(&dilated, radius);
-
-    // Morphological opening: erosion then dilation (suppresses thin bright strokes)
-    let eroded = grayscale_erode(&gray, radius);
-    let opened = grayscale_dilate(&eroded, radius);
-
-    let thresh_u8 = ((threshold.clamp(0.05, 0.95)) * 255.0).round() as u8;
-
-    let rgb = img.to_rgb8();
-    let mut raw_mask = GrayImage::new(w, h);
-    for y in 0..h {
-        for x in 0..w {
-            let orig = gray.get_pixel(x, y)[0];
-            let c_val = closed.get_pixel(x, y)[0];
-            let o_val = opened.get_pixel(x, y)[0];
-
-            let black_tophat = c_val.saturating_sub(orig);
-            let white_tophat = orig.saturating_sub(o_val);
-            let diff = black_tophat.max(white_tophat);
-
-            let px = rgb.get_pixel(x, y);
-            let color_diff = (px[0] as i32 - px[1] as i32).abs()
-                + (px[1] as i32 - px[2] as i32).abs()
-                + (px[2] as i32 - px[0] as i32).abs();
-            let is_neutral = color_diff < 50;
-
-            if diff >= thresh_u8 && (is_neutral || diff > 160) {
-                raw_mask.put_pixel(x, y, Luma([255]));
-            }
-        }
-    }
-
-    // Filter tiny isolated speckles and structural image seams
-    filter_small_components(&raw_mask, 12)
+/// Connected cluster of positive mask pixels and its tight bounding box `(x, y, w, h)`
+#[derive(Debug, Clone)]
+pub struct MaskCluster {
+    pub bbox: (u32, u32, u32, u32),
+    pub pixels: Vec<(u32, u32)>,
 }
 
-/// Removes connected components with fewer than `min_size` pixels, or components spanning full image width
-fn filter_small_components(mask: &GrayImage, min_size: usize) -> GrayImage {
+/// Extracts connected components of positive (`> 0`) mask pixels and merges components within `merge_gap` pixels
+pub fn extract_component_clusters(mask: &GrayImage, merge_gap: u32) -> Vec<MaskCluster> {
     let (w, h) = mask.dimensions();
     let mut visited = vec![false; (w * h) as usize];
-    let mut out = GrayImage::new(w, h);
+    let mut raw_clusters: Vec<ClusterGroup> = Vec::new();
 
     for y in 0..h {
         for x in 0..w {
             let idx = (y * w + x) as usize;
-            if mask.get_pixel(x, y)[0] == 255 && !visited[idx] {
-                // BFS to collect component
-                let mut component = Vec::new();
+            if mask.get_pixel(x, y)[0] > 0 && !visited[idx] {
+                let mut pixels = Vec::new();
                 let mut queue = std::collections::VecDeque::new();
                 queue.push_back((x, y));
                 visited[idx] = true;
@@ -207,7 +169,7 @@ fn filter_small_components(mask: &GrayImage, min_size: usize) -> GrayImage {
                 let mut max_y = y;
 
                 while let Some((cx, cy)) = queue.pop_front() {
-                    component.push((cx, cy));
+                    pixels.push((cx, cy));
                     min_x = min_x.min(cx);
                     max_x = max_x.max(cx);
                     min_y = min_y.min(cy);
@@ -222,14 +184,321 @@ fn filter_small_components(mask: &GrayImage, min_size: usize) -> GrayImage {
                             let ny = cy as i32 + dy;
                             if nx >= 0 && nx < w as i32 && ny >= 0 && ny < h as i32 {
                                 let n_idx = (ny as u32 * w + nx as u32) as usize;
-                                if mask.get_pixel(nx as u32, ny as u32)[0] == 255 && !visited[n_idx]
-                                {
+                                if mask.get_pixel(nx as u32, ny as u32)[0] > 0 && !visited[n_idx] {
                                     visited[n_idx] = true;
                                     queue.push_back((nx as u32, ny as u32));
                                 }
                             }
                         }
                     }
+                }
+
+                raw_clusters.push(((min_x, min_y, max_x, max_y), pixels));
+            }
+        }
+    }
+
+    // Iteratively merge clusters whose bounding boxes are within `merge_gap` pixels
+    loop {
+        let mut merged_any = false;
+        let mut i = 0;
+        while i < raw_clusters.len() {
+            let mut j = i + 1;
+            while j < raw_clusters.len() {
+                let (ax0, ay0, ax1, ay1) = raw_clusters[i].0;
+                let (bx0, by0, bx1, by1) = raw_clusters[j].0;
+                let x_close =
+                    ax0 <= bx1.saturating_add(merge_gap) && bx0 <= ax1.saturating_add(merge_gap);
+                let y_close =
+                    ay0 <= by1.saturating_add(merge_gap) && by0 <= ay1.saturating_add(merge_gap);
+
+                if x_close && y_close {
+                    let removed = raw_clusters.swap_remove(j);
+                    raw_clusters[i].0 = (
+                        ax0.min(removed.0.0),
+                        ay0.min(removed.0.1),
+                        ax1.max(removed.0.2),
+                        ay1.max(removed.0.3),
+                    );
+                    raw_clusters[i].1.extend(removed.1);
+                    merged_any = true;
+                } else {
+                    j += 1;
+                }
+            }
+            i += 1;
+        }
+        if !merged_any {
+            break;
+        }
+    }
+
+    raw_clusters
+        .into_iter()
+        .map(|((x0, y0, x1, y1), pixels)| MaskCluster {
+            bbox: (x0, y0, x1 - x0 + 1, y1 - y0 + 1),
+            pixels,
+        })
+        .collect()
+}
+
+/// Computes local inpainting ROIs `(x, y, w, h)` and each ROI's isolated local mask.
+/// - When `context_size == 0`, returns tight bounding boxes padded by `padding` (for fast classical inpainting).
+/// - When `context_size > 0` (e.g. `512`), groups nearby components into native `context_size x context_size` windows.
+pub fn compute_inpaint_roi_masks(
+    mask: &GrayImage,
+    context_size: u32,
+    padding: u32,
+) -> Vec<((u32, u32, u32, u32), GrayImage)> {
+    let (img_w, img_h) = mask.dimensions();
+    if img_w == 0 || img_h == 0 {
+        return Vec::new();
+    }
+
+    let initial_gap = if context_size == 0 {
+        padding.saturating_mul(2)
+    } else {
+        16
+    };
+    let clusters = extract_component_clusters(mask, initial_gap);
+    if clusters.is_empty() {
+        return Vec::new();
+    }
+
+    let mut groups: Vec<ClusterGroup> = clusters
+        .into_iter()
+        .map(|c| {
+            let (x, y, w, h) = c.bbox;
+            ((x, y, x + w - 1, y + h - 1), c.pixels)
+        })
+        .collect();
+
+    if context_size > 0 {
+        let win_w = context_size.min(img_w);
+        let win_h = context_size.min(img_h);
+        let max_span_w = win_w.saturating_sub(padding * 2).max(win_w / 2);
+        let max_span_h = win_h.saturating_sub(padding * 2).max(win_h / 2);
+
+        // Greedily merge closest groups that jointly fit inside one context window with padding
+        loop {
+            let mut best_pair: Option<(usize, usize, u64)> = None;
+            for i in 0..groups.len() {
+                for j in (i + 1)..groups.len() {
+                    let (ax0, ay0, ax1, ay1) = groups[i].0;
+                    let (bx0, by0, bx1, by1) = groups[j].0;
+                    let ux0 = ax0.min(bx0);
+                    let uy0 = ay0.min(by0);
+                    let ux1 = ax1.max(bx1);
+                    let uy1 = ay1.max(by1);
+
+                    if ux1 - ux0 < max_span_w && uy1 - uy0 < max_span_h {
+                        let acx = (ax0 + ax1) as i64 / 2;
+                        let acy = (ay0 + ay1) as i64 / 2;
+                        let bcx = (bx0 + bx1) as i64 / 2;
+                        let bcy = (by0 + by1) as i64 / 2;
+                        let dist_sq = ((acx - bcx).pow(2) + (acy - bcy).pow(2)) as u64;
+                        if best_pair.is_none_or(|(_, _, best_d)| dist_sq < best_d) {
+                            best_pair = Some((i, j, dist_sq));
+                        }
+                    }
+                }
+            }
+
+            if let Some((i, j, _)) = best_pair {
+                let removed = groups.swap_remove(j);
+                let (ax0, ay0, ax1, ay1) = groups[i].0;
+                groups[i].0 = (
+                    ax0.min(removed.0.0),
+                    ay0.min(removed.0.1),
+                    ax1.max(removed.0.2),
+                    ay1.max(removed.0.3),
+                );
+                groups[i].1.extend(removed.1);
+            } else {
+                break;
+            }
+        }
+    }
+
+    groups
+        .into_iter()
+        .map(|((x0, y0, x1, y1), pixels)| {
+            let (rx, ry, rw, rh) = if context_size == 0 {
+                let rx = x0.saturating_sub(padding);
+                let ry = y0.saturating_sub(padding);
+                let rw = (x1 + padding + 1).min(img_w) - rx;
+                let rh = (y1 + padding + 1).min(img_h) - ry;
+                (rx, ry, rw, rh)
+            } else {
+                let win_w = context_size.min(img_w);
+                let win_h = context_size.min(img_h);
+                let span_w = x1 - x0 + 1;
+                let span_h = y1 - y0 + 1;
+                let rw = (span_w + padding * 2).max(win_w).min(img_w);
+                let rh = (span_h + padding * 2).max(win_h).min(img_h);
+                let cx = (x0 + x1) / 2;
+                let cy = (y0 + y1) / 2;
+                let rx = cx.saturating_sub(rw / 2).min(img_w - rw);
+                let ry = cy.saturating_sub(rh / 2).min(img_h - rh);
+                (rx, ry, rw, rh)
+            };
+
+            let mut local_mask = GrayImage::new(rw, rh);
+            for (px, py) in pixels {
+                if px >= rx && px < rx + rw && py >= ry && py < ry + rh {
+                    local_mask.put_pixel(px - rx, py - ry, Luma([mask.get_pixel(px, py)[0]]));
+                }
+            }
+            ((rx, ry, rw, rh), local_mask)
+        })
+        .collect()
+}
+
+/// Computes local inpainting ROI rectangles `(x, y, width, height)` for scattered mask regions
+pub fn compute_inpaint_rois(
+    mask: &GrayImage,
+    context_size: u32,
+    padding: u32,
+) -> Vec<(u32, u32, u32, u32)> {
+    compute_inpaint_roi_masks(mask, context_size, padding)
+        .into_iter()
+        .map(|(roi, _)| roi)
+        .collect()
+}
+
+/// Detects high-contrast text and thin overlay annotations (strokes, watermarks, dimensions)
+pub fn detect_text_mask(img: &image::DynamicImage, threshold: f32) -> GrayImage {
+    let gray = img.to_luma8();
+    let (w, h) = gray.dimensions();
+
+    // Structuring element radius for stroke detection (captures stroke widths up to 10-12px)
+    let radius = 5u32;
+
+    // Morphological closing: dilation then erosion (fills thin dark strokes)
+    let dilated = grayscale_dilate(&gray, radius);
+    let closed = grayscale_erode(&dilated, radius);
+
+    // Morphological opening: erosion then dilation (suppresses thin bright strokes)
+    let eroded = grayscale_erode(&gray, radius);
+    let opened = grayscale_dilate(&eroded, radius);
+
+    let thresh_u8 = ((threshold.clamp(0.05, 0.95)) * 255.0).round() as u8;
+
+    let rgb = img.to_rgb8();
+    let mut dark_raw = GrayImage::new(w, h);
+    let mut bright_raw = GrayImage::new(w, h);
+
+    for y in 0..h {
+        for x in 0..w {
+            let orig = gray.get_pixel(x, y)[0];
+            let c_val = closed.get_pixel(x, y)[0];
+            let o_val = opened.get_pixel(x, y)[0];
+
+            let black_tophat = c_val.saturating_sub(orig);
+            let white_tophat = orig.saturating_sub(o_val);
+
+            let px = rgb.get_pixel(x, y);
+            let max_c = px[0].max(px[1]).max(px[2]);
+            let min_c = px[0].min(px[1]).min(px[2]);
+            let chroma = max_c - min_c;
+
+            // Reject chromatic object features (such as dark green stems, leaves, or colored petals)
+            let is_neutral = if max_c <= 25 {
+                chroma <= 12
+            } else {
+                chroma <= 16 && (chroma as u32 * 6 <= max_c as u32)
+            };
+
+            if !is_neutral {
+                continue;
+            }
+
+            if black_tophat >= thresh_u8 {
+                dark_raw.put_pixel(x, y, Luma([255]));
+            }
+            if white_tophat >= thresh_u8 && orig >= 180 {
+                bright_raw.put_pixel(x, y, Luma([255]));
+            }
+        }
+    }
+
+    let mut out = GrayImage::new(w, h);
+    filter_stroke_components(&dark_raw, &gray, &opened, 12, false, &mut out);
+    filter_stroke_components(&bright_raw, &gray, &opened, 12, true, &mut out);
+    out
+}
+
+/// Validates candidate dark or bright stroke components, discarding tiny speckles, full-image seams,
+/// and narrow background gaps peeking between dark foreground objects (e.g. leaves or fingers).
+fn filter_stroke_components(
+    mask: &GrayImage,
+    gray: &GrayImage,
+    opened: &GrayImage,
+    min_size: usize,
+    is_bright: bool,
+    out: &mut GrayImage,
+) {
+    let (w, h) = mask.dimensions();
+    let mut visited = vec![false; (w * h) as usize];
+
+    for y in 0..h {
+        for x in 0..w {
+            let idx = (y * w + x) as usize;
+            if mask.get_pixel(x, y)[0] == 255 && !visited[idx] {
+                let mut component = Vec::new();
+                let mut queue = std::collections::VecDeque::new();
+                queue.push_back((x, y));
+                visited[idx] = true;
+
+                let mut min_x = x;
+                let mut max_x = x;
+                let mut min_y = y;
+                let mut max_y = y;
+                let mut min_luma = 255u8;
+                let mut sum_luma = 0u64;
+
+                let mut boundary_total = 0usize;
+                let mut boundary_same_level = 0usize;
+                let mut boundary_seen = std::collections::HashSet::new();
+                let mut boundary_lumas = Vec::new();
+
+                while let Some((cx, cy)) = queue.pop_front() {
+                    component.push((cx, cy));
+                    min_x = min_x.min(cx);
+                    max_x = max_x.max(cx);
+                    min_y = min_y.min(cy);
+                    max_y = max_y.max(cy);
+
+                    let g = gray.get_pixel(cx, cy)[0];
+                    min_luma = min_luma.min(g);
+                    sum_luma += g as u64;
+
+                    for dy in -1i32..=1 {
+                        for dx in -1i32..=1 {
+                            if dx == 0 && dy == 0 {
+                                continue;
+                            }
+                            let nx = cx as i32 + dx;
+                            let ny = cy as i32 + dy;
+                            if nx >= 0 && nx < w as i32 && ny >= 0 && ny < h as i32 {
+                                let nu = nx as u32;
+                                let nv = ny as u32;
+                                let n_idx = (nv * w + nu) as usize;
+                                if mask.get_pixel(nu, nv)[0] == 255 {
+                                    if !visited[n_idx] {
+                                        visited[n_idx] = true;
+                                        queue.push_back((nu, nv));
+                                    }
+                                } else if boundary_seen.insert(n_idx) {
+                                    boundary_lumas.push(gray.get_pixel(nu, nv)[0]);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if component.len() < min_size {
+                    continue;
                 }
 
                 let comp_w = max_x - min_x + 1;
@@ -240,14 +509,59 @@ fn filter_small_components(mask: &GrayImage, min_size: usize) -> GrayImage {
                     continue;
                 }
 
-                if component.len() >= min_size {
-                    for (cx, cy) in component {
-                        out.put_pixel(cx, cy, Luma([255]));
+                let mean_luma = (sum_luma as f32) / (component.len() as f32);
+
+                // Faint thin horizontal shadows/creases are not ink strokes
+                if !is_bright && min_luma > 55 && comp_h <= 4 {
+                    continue;
+                }
+
+                for bg in boundary_lumas {
+                    boundary_total += 1;
+                    if is_bright {
+                        if (bg as f32) >= mean_luma - 20.0 {
+                            boundary_same_level += 1;
+                        }
+                    } else if (bg as f32) <= mean_luma + 15.0 {
+                        boundary_same_level += 1;
                     }
+                }
+
+                if boundary_total > 0 {
+                    let same_ratio = boundary_same_level as f32 / boundary_total as f32;
+                    let max_same = if is_bright { 0.04 } else { 0.25 };
+                    if same_ratio > max_same {
+                        continue;
+                    }
+                }
+
+                // For bright candidates, reject enclosed holes of a bright page/cloth background peeking between dark objects
+                if is_bright {
+                    let margin = 36u32;
+                    let bx0 = min_x.saturating_sub(margin);
+                    let by0 = min_y.saturating_sub(margin);
+                    let bx1 = (max_x + margin + 1).min(w);
+                    let by1 = (max_y + margin + 1).min(h);
+                    let mut bg_total = 0u32;
+                    let mut bg_bright = 0u32;
+                    let bright_floor = (mean_luma - 18.0).max(0.0) as u8;
+                    for by in by0..by1 {
+                        for bx in bx0..bx1 {
+                            bg_total += 1;
+                            if opened.get_pixel(bx, by)[0] >= bright_floor {
+                                bg_bright += 1;
+                            }
+                        }
+                    }
+                    if bg_total > 0 && (bg_bright as f32 / bg_total as f32) >= 0.25 {
+                        continue;
+                    }
+                }
+
+                for (cx, cy) in component {
+                    out.put_pixel(cx, cy, Luma([255]));
                 }
             }
         }
     }
-
-    out
 }

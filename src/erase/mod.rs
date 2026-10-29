@@ -8,7 +8,7 @@ pub mod pipeline;
 use crate::erase::benchmark::BenchmarkReport;
 use crate::erase::clip::ClipGrounding;
 use crate::erase::device::resolve_device_target;
-use crate::erase::mask::{compute_bounding_box, dilate_mask};
+use crate::erase::mask::{compute_inpaint_roi_masks, dilate_mask};
 use crate::erase::models::{InpaintModelPreset, ModelManager};
 use crate::erase::pipeline::{CandleInpainter, blend_patch, inpaint_classical};
 use crate::error::MartiniError;
@@ -238,14 +238,26 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
             .map_err(|e| MartiniError::Io(std::io::Error::other(e)))?;
     }
 
-    // 7. Inpainting execution
-    let result_img = if let Some(bbox) = compute_bounding_box(&mask, 16) {
-        let (crop_x, crop_y, crop_w, crop_h) = bbox;
-        let crop_patch = img.crop_imm(crop_x, crop_y, crop_w, crop_h);
-        let crop_mask = imageops::crop_imm(&mask, crop_x, crop_y, crop_w, crop_h).to_image();
+    // 7. Inpainting execution across clustered local ROIs
+    let roi_masks = if args.fast {
+        compute_inpaint_roi_masks(&mask, 0, 16)
+    } else {
+        compute_inpaint_roi_masks(&mask, 512, 64)
+    };
 
-        let inpainted_patch = if args.fast {
-            inpaint_classical(&crop_patch, &crop_mask, args.steps)?
+    let result_img = if !roi_masks.is_empty() {
+        let mut working_img = img;
+        let mut total_blend_ms = 0u64;
+
+        if args.fast {
+            for (roi, roi_mask) in roi_masks {
+                let (crop_x, crop_y, crop_w, crop_h) = roi;
+                let crop_patch = working_img.crop_imm(crop_x, crop_y, crop_w, crop_h);
+                let inpainted_patch = inpaint_classical(&crop_patch, &roi_mask, args.steps)?;
+                let t_blend = Instant::now();
+                working_img = blend_patch(&working_img, &inpainted_patch, &roi_mask, roi)?;
+                total_blend_ms += t_blend.elapsed().as_millis() as u64;
+            }
         } else {
             let model_paths = model_mgr.ensure_models(args.model)?;
             #[cfg(feature = "nn-cpu")]
@@ -253,32 +265,38 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
             #[cfg(not(feature = "nn-cpu"))]
             let inpainter = CandleInpainter::load(&model_paths, args.model)?;
 
-            inpainter.inpaint(
-                &crop_patch,
-                &crop_mask,
-                args.replace.as_deref(),
-                args.steps,
-                benchmark_report.as_mut(),
-            )?
-        };
-
-        let t_blend = Instant::now();
-        let blended = blend_patch(&img, &inpainted_patch, &mask, bbox)?;
-        let blend_ms = t_blend.elapsed().as_millis() as u64;
-
-        if let Some(ref mut rep) = benchmark_report {
-            rep.alpha_blend_ms = blend_ms;
-            rep.total_ms = rep.localization_ms
-                + rep.vae_encode_ms
-                + rep.denoise_ms
-                + rep.vae_decode_ms
-                + rep.alpha_blend_ms;
+            for (roi, roi_mask) in roi_masks {
+                let (crop_x, crop_y, crop_w, crop_h) = roi;
+                let crop_patch = working_img.crop_imm(crop_x, crop_y, crop_w, crop_h);
+                let inpainted_patch = inpainter.inpaint(
+                    &crop_patch,
+                    &roi_mask,
+                    args.replace.as_deref(),
+                    args.steps,
+                    benchmark_report.as_mut(),
+                )?;
+                let t_blend = Instant::now();
+                working_img = blend_patch(&working_img, &inpainted_patch, &roi_mask, roi)?;
+                total_blend_ms += t_blend.elapsed().as_millis() as u64;
+            }
         }
 
-        blended
+        if let Some(ref mut rep) = benchmark_report {
+            rep.alpha_blend_ms = total_blend_ms;
+        }
+
+        working_img
     } else {
         img
     };
+
+    if let Some(ref mut rep) = benchmark_report {
+        rep.total_ms = rep.localization_ms
+            + rep.vae_encode_ms
+            + rep.denoise_ms
+            + rep.vae_decode_ms
+            + rep.alpha_blend_ms;
+    }
 
     // 8. Save output
     result_img
