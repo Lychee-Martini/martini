@@ -48,11 +48,38 @@ pub fn is_font_installed(family: &str) -> bool {
     db.query(&query).is_some()
 }
 
+pub fn is_standard_font(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    matches!(
+        lower.as_str(),
+        "simsun"
+            | "simhei"
+            | "microsoft yahei"
+            | "kaiti"
+            | "fangsong"
+            | "pingfang sc"
+            | "songti sc"
+            | "hiragino sans gb"
+            | "noto sans cjk sc"
+            | "noto serif cjk sc"
+            | "arial"
+            | "times new roman"
+            | "helvetica"
+            | "calibri"
+            | "cambria"
+            | "consolas"
+            | "courier new"
+            | "tahoma"
+            | "verdana"
+            | "georgia"
+    )
+}
+
 pub fn resolve_font_names(pdf_font: &str, has_cjk: bool) -> FontPair {
     let clean = clean_font_name(pdf_font);
 
-    // If installed locally, keep it for the relevant script
-    let installed = is_font_installed(&clean);
+    // If installed locally or is a recognized standard font family, preserve it
+    let is_valid_font = is_font_installed(&clean) || is_standard_font(&clean);
 
     let lower = clean.to_lowercase();
     let is_serif = lower.contains("serif")
@@ -97,7 +124,7 @@ pub fn resolve_font_names(pdf_font: &str, has_cjk: bool) -> FontPair {
         "Noto Serif CJK SC"
     };
 
-    let latin = if installed && !has_cjk {
+    let latin = if is_valid_font && !has_cjk {
         clean.clone()
     } else if is_mono {
         "Consolas".to_string()
@@ -107,7 +134,7 @@ pub fn resolve_font_names(pdf_font: &str, has_cjk: bool) -> FontPair {
         default_latin_sans.to_string()
     };
 
-    let east_asian = if installed && has_cjk {
+    let east_asian = if is_valid_font && has_cjk {
         clean
     } else if lower.contains("simsun") || lower.contains("song") || is_serif {
         default_ea_serif.to_string()

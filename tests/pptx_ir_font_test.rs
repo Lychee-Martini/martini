@@ -6,6 +6,13 @@ fn test_font_resolution_cjk_fallback() {
     let font_pair = resolve_font_names("SimSun-Bold", true);
     assert_eq!(font_pair.east_asian, "SimSun");
 
+    let generic_serif_pair = resolve_font_names("GenericSerifFont", true);
+    assert!(
+        generic_serif_pair.east_asian == "SimSun"
+            || generic_serif_pair.east_asian == "Songti SC"
+            || generic_serif_pair.east_asian == "Noto Serif CJK SC"
+    );
+
     let yahei_pair = resolve_font_names("CustomHeitiFont", true);
     assert!(
         yahei_pair.east_asian == "Microsoft YaHei"
