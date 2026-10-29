@@ -117,7 +117,12 @@ impl MartiniTypstWorld {
         if target.exists() {
             Ok(target)
         } else {
-            Err(FileError::NotFound(target))
+            let from_root = Path::new("/").join(vpath_str);
+            if from_root.exists() {
+                Ok(from_root)
+            } else {
+                Err(FileError::NotFound(target))
+            }
         }
     }
 }

@@ -44,11 +44,8 @@ fn test_image_only_page_raster_fallback() {
     let temp_dir = tempdir().unwrap();
     let img_path = temp_dir.path().join("sample.png");
     image::RgbImage::new(100, 100).save(&img_path).unwrap();
-    let typst_src = format!(
-        "#set page(margin: 0mm)\n#image(\"{}\")",
-        img_path.to_str().unwrap().replace('\\', "/")
-    );
-    let pdf_bytes = compile_typst_to_pdf(&typst_src, Path::new(".")).unwrap();
+    let typst_src = "#set page(margin: 0mm)\n#image(\"sample.png\")";
+    let pdf_bytes = compile_typst_to_pdf(typst_src, temp_dir.path()).unwrap();
     let pdf_path = temp_dir.path().join("scan.pdf");
     let pptx_path = temp_dir.path().join("scan.pptx");
     fs::write(&pdf_path, pdf_bytes).unwrap();
