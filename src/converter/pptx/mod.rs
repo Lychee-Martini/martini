@@ -4,6 +4,8 @@ use crate::error::MartiniError;
 pub mod extract;
 pub mod font;
 pub mod ir;
+pub mod paragraph;
+pub mod table;
 pub mod writer;
 
 pub fn convert_pdf_to_pptx(

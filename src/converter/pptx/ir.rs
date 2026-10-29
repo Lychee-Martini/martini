@@ -10,6 +10,19 @@ impl RectEmu {
     pub const fn new(x: i64, y: i64, w: i64, h: i64) -> Self {
         Self { x, y, w, h }
     }
+
+    pub fn union(&self, other: &Self) -> Self {
+        let x1 = self.x.min(other.x);
+        let y1 = self.y.min(other.y);
+        let x2 = (self.x + self.w).max(other.x + other.w);
+        let y2 = (self.y + self.h).max(other.y + other.h);
+        Self {
+            x: x1,
+            y: y1,
+            w: (x2 - x1).max(0),
+            h: (y2 - y1).max(0),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -317,24 +317,24 @@ pub fn extract_page_objects(
             );
 
             // Review Focus 4: Try getting processed image (preserving alpha/transparency mask)
-            let (image_bytes, format) =
-                if let Ok(dyn_img) = image_obj.get_processed_image(document) {
-                    let mut png_bytes = Vec::new();
-                    if dyn_img
-                        .write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)
-                        .is_ok()
-                    {
-                        (png_bytes, ImageFormat::Png)
-                    } else if let Ok(raw) = image_obj.get_raw_image_data() {
-                        (raw, ImageFormat::Jpeg)
-                    } else {
-                        continue;
-                    }
+            let (image_bytes, format) = if let Ok(dyn_img) = image_obj.get_processed_image(document)
+            {
+                let mut png_bytes = Vec::new();
+                if dyn_img
+                    .write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)
+                    .is_ok()
+                {
+                    (png_bytes, ImageFormat::Png)
                 } else if let Ok(raw) = image_obj.get_raw_image_data() {
                     (raw, ImageFormat::Jpeg)
                 } else {
                     continue;
-                };
+                }
+            } else if let Ok(raw) = image_obj.get_raw_image_data() {
+                (raw, ImageFormat::Jpeg)
+            } else {
+                continue;
+            };
 
             image_items.push(RawImageItem {
                 rect,
