@@ -1,2 +1,8 @@
 [target.'cfg(all(windows, target_env = "msvc"))']
 rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+# MSVC cl.exe uses the legacy traditional preprocessor by default on Windows.
+# CUDA 13.4+ CCCL requires the C99/C++20 standard-conforming preprocessor (/Zc:preprocessor),
+# otherwise compilation aborts with fatal error C1189.
+CL = "/Zc:preprocessor"
