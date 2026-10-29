@@ -1,6 +1,6 @@
 #[cfg(feature = "nn-cpu")]
 use crate::erase::mask::extract_component_clusters;
-use crate::erase::mask::{detect_text_mask, dilate_mask};
+use crate::erase::mask::{detect_text_mask, dilate_mask, resolution_scale};
 use crate::error::MartiniError;
 use image::{DynamicImage, GrayImage, Luma};
 use std::path::Path;
@@ -299,34 +299,36 @@ impl ClipGrounding {
         threshold: f32,
     ) -> Result<GrayImage, MartiniError> {
         let (orig_w, orig_h) = (img.width(), img.height());
+        let res_scale = resolution_scale(orig_w, orig_h);
         let candidate_mask = detect_text_mask(img, threshold);
-        // Tight word-level merge gap (8px) keeps text labels distinct from long spanning lines
-        let clusters = extract_component_clusters(&candidate_mask, 8);
+        // Resolution-scaled word-level merge gap keeps multi-digit/character labels grouped at 4K+
+        let clusters = extract_component_clusters(&candidate_mask, 8 * res_scale);
         if clusters.is_empty() {
             return Ok(GrayImage::new(orig_w, orig_h));
         }
 
         let prompts = vec![
             format!("close up of {}", target),
-            "printed text, letters, numbers, digits, or characters overlay".to_string(),
-            "text label, watermark, measurement line, or dimension annotation".to_string(),
-            "green plant leaves, flower stem, or foliage without text".to_string(),
-            "flower petals or natural object without any text".to_string(),
-            "plain fabric cloth, wall, or background texture without text".to_string(),
+            "black or white printed numbers, digits, letters, or characters".to_string(),
+            "text label, watermark, or dimension annotation".to_string(),
+            "green plant leaves, flower stem, or dark foliage".to_string(),
+            "flower petals, blossom, or natural plant".to_string(),
+            "plain smooth empty wall or solid surface".to_string(),
         ];
         let input_ids = self.encode_prompts(&prompts)?;
 
         let mut crops = Vec::new();
         let mut crop_ranges = Vec::with_capacity(clusters.len());
-        let margin = 24u32;
+        let margin = 14 * res_scale;
+        let line_span_thresh = 180 * res_scale;
+        let half = 56 * res_scale;
 
         for cluster in &clusters {
             let (bx, by, bw, bh) = cluster.bbox;
             let start_idx = crops.len();
 
-            if bw.max(bh) > 180 && cluster.pixels.len() >= 4 {
+            if bw.max(bh) > line_span_thresh && cluster.pixels.len() >= 4 {
                 // Sample tight local patches along elongated lines (e.g. dimension rulers)
-                let half = 56u32;
                 for frac in [
                     0usize,
                     cluster.pixels.len() / 4,
@@ -351,7 +353,7 @@ impl ClipGrounding {
         }
 
         let pos_probs = self.score_crops_positive_prob(&crops, &input_ids, 3)?;
-        let clip_cutoff = (threshold * 0.5).clamp(0.12, 0.45);
+        let clip_cutoff = (threshold * 0.32).clamp(0.08, 0.40);
 
         let mut verified = GrayImage::new(orig_w, orig_h);
         for (cluster, range) in clusters.iter().zip(crop_ranges) {
@@ -363,7 +365,7 @@ impl ClipGrounding {
             }
         }
 
-        Ok(dilate_mask(&verified, 2))
+        Ok(dilate_mask(&verified, 2 * res_scale))
     }
 
     #[cfg(feature = "nn-cpu")]
@@ -378,6 +380,7 @@ impl ClipGrounding {
             return Ok(GrayImage::new(orig_w, orig_h));
         }
 
+        let res_scale = resolution_scale(orig_w, orig_h);
         let prompts = vec![
             format!("a photo of {}", target),
             format!("close up of {}", target),
@@ -388,12 +391,16 @@ impl ClipGrounding {
 
         let min_dim = orig_w.min(orig_h);
         let scales = [
-            (min_dim / 2).clamp(96, 384).min(min_dim),
-            (min_dim / 4).clamp(64, 224).min(min_dim),
+            (min_dim / 2)
+                .clamp(96 * res_scale, 384 * res_scale)
+                .min(min_dim),
+            (min_dim / 4)
+                .clamp(64 * res_scale, 224 * res_scale)
+                .min(min_dim),
         ];
 
-        let map_w = (orig_w / 8).clamp(16, 128);
-        let map_h = (orig_h / 8).clamp(16, 128);
+        let map_w = (orig_w / (8 * res_scale)).clamp(16, 128);
+        let map_h = (orig_h / (8 * res_scale)).clamp(16, 128);
         let mut prob_sum = vec![0.0f32; (map_w * map_h) as usize];
         let mut weight_sum = vec![0.0f32; (map_w * map_h) as usize];
 
@@ -404,7 +411,7 @@ impl ClipGrounding {
             if win == 0 {
                 continue;
             }
-            let stride = (win / 2).max(16);
+            let stride = (win / 2).max(16 * res_scale);
             let mut y = 0u32;
             loop {
                 let wy = y.min(orig_h - win);
@@ -473,7 +480,7 @@ impl ClipGrounding {
             }
         }
 
-        Ok(dilate_mask(&binary, 4))
+        Ok(dilate_mask(&binary, 4 * res_scale))
     }
 
     pub fn locate(
@@ -494,8 +501,9 @@ impl ClipGrounding {
         #[cfg(not(feature = "nn-cpu"))]
         {
             let _ = target;
+            let res_scale = resolution_scale(img.width(), img.height());
             let detected = detect_text_mask(img, threshold);
-            Ok(dilate_mask(&detected, 2))
+            Ok(dilate_mask(&detected, 2 * res_scale))
         }
     }
 }

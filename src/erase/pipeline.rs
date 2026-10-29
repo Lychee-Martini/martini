@@ -1,8 +1,9 @@
 use crate::erase::benchmark::BenchmarkReport;
-use crate::erase::mask::feather_mask;
+use crate::erase::mask::{feather_mask, resolution_scale};
 use crate::erase::models::{InpaintModelPreset, ModelPaths};
 use crate::error::MartiniError;
 use image::{DynamicImage, GrayImage, Rgba, imageops};
+use indicatif::ProgressBar;
 #[cfg(feature = "nn-cpu")]
 use std::time::Instant;
 
@@ -240,23 +241,96 @@ pub fn inpaint_classical(
     Ok(DynamicImage::ImageRgba8(rgba))
 }
 
-pub fn blend_patch(
-    original: &DynamicImage,
+/// Replaces pixels belonging to other (foreign) mask clusters inside a local context crop
+/// with the crop's unmasked background mean so neighboring text never contaminates diffusion context.
+pub(crate) fn scrub_foreign_masked_pixels(
+    patch: &mut image::RgbImage,
+    full_mask: &GrayImage,
+    local_mask: &GrayImage,
+    crop_x: u32,
+    crop_y: u32,
+) {
+    let (pw, ph) = patch.dimensions();
+    let (fw, fh) = full_mask.dimensions();
+    let mut has_foreign = false;
+
+    'scan: for py in 0..ph {
+        let fy = crop_y + py;
+        if fy >= fh {
+            break;
+        }
+        for px in 0..pw {
+            let fx = crop_x + px;
+            if fx < fw && full_mask.get_pixel(fx, fy)[0] > 0 && local_mask.get_pixel(px, py)[0] == 0
+            {
+                has_foreign = true;
+                break 'scan;
+            }
+        }
+    }
+
+    if !has_foreign {
+        return;
+    }
+
+    let mut r_sum = 0u64;
+    let mut g_sum = 0u64;
+    let mut b_sum = 0u64;
+    let mut count = 0u64;
+    for py in 0..ph {
+        let fy = crop_y + py;
+        for px in 0..pw {
+            let fx = crop_x + px;
+            if fx < fw && fy < fh && full_mask.get_pixel(fx, fy)[0] == 0 {
+                let p = patch.get_pixel(px, py);
+                r_sum += p[0] as u64;
+                g_sum += p[1] as u64;
+                b_sum += p[2] as u64;
+                count += 1;
+            }
+        }
+    }
+
+    if count == 0 {
+        return;
+    }
+    let fill = image::Rgb([
+        (r_sum / count) as u8,
+        (g_sum / count) as u8,
+        (b_sum / count) as u8,
+    ]);
+
+    for py in 0..ph {
+        let fy = crop_y + py;
+        if fy >= fh {
+            break;
+        }
+        for px in 0..pw {
+            let fx = crop_x + px;
+            if fx < fw && full_mask.get_pixel(fx, fy)[0] > 0 && local_mask.get_pixel(px, py)[0] == 0
+            {
+                patch.put_pixel(px, py, fill);
+            }
+        }
+    }
+}
+
+pub fn blend_patch_in_place(
+    target: &mut DynamicImage,
     inpainted_patch: &DynamicImage,
     mask: &GrayImage,
     crop: (u32, u32, u32, u32),
-) -> Result<DynamicImage, MartiniError> {
+) -> Result<(), MartiniError> {
     let (crop_x, crop_y, crop_w, crop_h) = crop;
-    let mut result = original.to_rgba8();
-    let patch_rgba = inpainted_patch.to_rgba8();
+    let (img_w, img_h) = (target.width(), target.height());
+    let feather_r = (resolution_scale(img_w, img_h) * 2).clamp(2, 10);
 
     // Support both full-image masks and crop-local ROI masks while only feathering the local crop
-    let (feathered, offset_x, offset_y) = if mask.dimensions() == (result.width(), result.height())
-    {
-        let sub_x = crop_x.saturating_sub(2);
-        let sub_y = crop_y.saturating_sub(2);
-        let sub_end_x = (crop_x + crop_w + 2).min(mask.width());
-        let sub_end_y = (crop_y + crop_h + 2).min(mask.height());
+    let (feathered, offset_x, offset_y) = if mask.dimensions() == (img_w, img_h) {
+        let sub_x = crop_x.saturating_sub(feather_r);
+        let sub_y = crop_y.saturating_sub(feather_r);
+        let sub_end_x = (crop_x + crop_w + feather_r).min(mask.width());
+        let sub_end_y = (crop_y + crop_h + feather_r).min(mask.height());
         let sub = imageops::crop_imm(
             mask,
             sub_x,
@@ -265,9 +339,65 @@ pub fn blend_patch(
             sub_end_y.saturating_sub(sub_y),
         )
         .to_image();
-        (feather_mask(&sub, 2), crop_x - sub_x, crop_y - sub_y)
+        (
+            feather_mask(&sub, feather_r),
+            crop_x - sub_x,
+            crop_y - sub_y,
+        )
     } else {
-        (feather_mask(mask, 2), 0, 0)
+        (feather_mask(mask, feather_r), 0, 0)
+    };
+
+    if !target.color().has_alpha() {
+        let patch_rgb = inpainted_patch.to_rgb8();
+        if !matches!(target, DynamicImage::ImageRgb8(_)) {
+            *target = DynamicImage::ImageRgb8(target.to_rgb8());
+        }
+        let Some(result_rgb) = target.as_mut_rgb8() else {
+            return Ok(());
+        };
+
+        for py in 0..crop_h {
+            for px in 0..crop_w {
+                let ox = crop_x + px;
+                let oy = crop_y + py;
+                let mx = px + offset_x;
+                let my = py + offset_y;
+
+                if ox < img_w
+                    && oy < img_h
+                    && px < patch_rgb.width()
+                    && py < patch_rgb.height()
+                    && mx < feathered.width()
+                    && my < feathered.height()
+                {
+                    let mask_val = feathered.get_pixel(mx, my)[0] as f32 / 255.0;
+                    if mask_val > 0.0 {
+                        let orig_px = result_rgb.get_pixel(ox, oy);
+                        let patch_px = patch_rgb.get_pixel(px, py);
+                        let r = ((1.0 - mask_val) * orig_px[0] as f32
+                            + mask_val * patch_px[0] as f32)
+                            .round() as u8;
+                        let g = ((1.0 - mask_val) * orig_px[1] as f32
+                            + mask_val * patch_px[1] as f32)
+                            .round() as u8;
+                        let b = ((1.0 - mask_val) * orig_px[2] as f32
+                            + mask_val * patch_px[2] as f32)
+                            .round() as u8;
+                        result_rgb.put_pixel(ox, oy, image::Rgb([r, g, b]));
+                    }
+                }
+            }
+        }
+        return Ok(());
+    }
+
+    let patch_rgba = inpainted_patch.to_rgba8();
+    if !matches!(target, DynamicImage::ImageRgba8(_)) {
+        *target = DynamicImage::ImageRgba8(target.to_rgba8());
+    }
+    let Some(result) = target.as_mut_rgba8() else {
+        return Ok(());
     };
 
     for py in 0..crop_h {
@@ -277,8 +407,8 @@ pub fn blend_patch(
             let mx = px + offset_x;
             let my = py + offset_y;
 
-            if ox < result.width()
-                && oy < result.height()
+            if ox < img_w
+                && oy < img_h
                 && px < patch_rgba.width()
                 && py < patch_rgba.height()
                 && mx < feathered.width()
@@ -305,7 +435,18 @@ pub fn blend_patch(
         }
     }
 
-    Ok(DynamicImage::ImageRgba8(result))
+    Ok(())
+}
+
+pub fn blend_patch(
+    original: &DynamicImage,
+    inpainted_patch: &DynamicImage,
+    mask: &GrayImage,
+    crop: (u32, u32, u32, u32),
+) -> Result<DynamicImage, MartiniError> {
+    let mut out = original.clone();
+    blend_patch_in_place(&mut out, inpainted_patch, mask, crop)?;
+    Ok(out)
 }
 
 /// Neural diffusion inpainter using Hugging Face Candle (Stable Diffusion Inpainting)
@@ -462,6 +603,18 @@ impl CandleInpainter {
         prompt: Option<&str>,
         steps: usize,
         reporter: Option<&mut BenchmarkReport>,
+    ) -> Result<DynamicImage, MartiniError> {
+        self.inpaint_with_progress(image, mask, prompt, steps, reporter, None)
+    }
+
+    pub fn inpaint_with_progress(
+        &self,
+        image: &DynamicImage,
+        mask: &GrayImage,
+        prompt: Option<&str>,
+        steps: usize,
+        reporter: Option<&mut BenchmarkReport>,
+        progress: Option<&ProgressBar>,
     ) -> Result<DynamicImage, MartiniError> {
         #[cfg(feature = "nn-cpu")]
         {
@@ -781,6 +934,10 @@ impl CandleInpainter {
                         })?
                     };
                 }
+
+                if let Some(pb) = progress {
+                    pb.inc(1);
+                }
             }
 
             let denoise_ms = t_denoise.elapsed().as_millis() as u64;
@@ -915,6 +1072,7 @@ impl CandleInpainter {
         {
             let _ = prompt;
             let _ = reporter;
+            let _ = progress;
             inpaint_classical(image, mask, steps)
         }
     }

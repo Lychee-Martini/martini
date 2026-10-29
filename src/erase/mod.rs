@@ -8,12 +8,18 @@ pub mod pipeline;
 use crate::erase::benchmark::BenchmarkReport;
 use crate::erase::clip::ClipGrounding;
 use crate::erase::device::resolve_device_target;
-use crate::erase::mask::{compute_inpaint_roi_masks, dilate_mask};
+use crate::erase::mask::{
+    InpaintBatch, compute_inpaint_roi_masks, dilate_mask, plan_neural_inpaint_batches,
+    resolution_scale,
+};
 use crate::erase::models::{InpaintModelPreset, ModelManager};
-use crate::erase::pipeline::{CandleInpainter, blend_patch, inpaint_classical};
+use crate::erase::pipeline::{
+    CandleInpainter, blend_patch_in_place, inpaint_classical, scrub_foreign_masked_pixels,
+};
 use crate::error::MartiniError;
 use clap::Args;
-use image::{GenericImageView, GrayImage, imageops};
+use image::{DynamicImage, GenericImageView, GrayImage, imageops};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -163,7 +169,9 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
         ),
     })?;
 
+    let t_run_start = Instant::now();
     let (img_w, img_h) = img.dimensions();
+    let res_scale = resolution_scale(img_w, img_h);
 
     // 3. Resolve device & benchmark instrumentation
     let _dev_target = resolve_device_target(&args.device)?;
@@ -171,6 +179,34 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
     let (candle_dev, dev_name) = crate::erase::device::select_candle_device(_dev_target);
     #[cfg(not(feature = "nn-cpu"))]
     let dev_name = "CPU".to_string();
+
+    if !args.json {
+        if args.fast {
+            println!("⚡ Device: CPU (fast mode) | Image: {}x{}", img_w, img_h);
+        } else {
+            println!(
+                "⚡ Device: {} | Model: {} | Image: {}x{}",
+                dev_name,
+                args.model.as_str(),
+                img_w,
+                img_h
+            );
+        }
+    }
+
+    let progress = if args.json {
+        None
+    } else {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.green} [{elapsed_precise}] {msg}")
+                .unwrap(),
+        );
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        pb.set_message("Locating target mask...");
+        Some(pb)
+    };
 
     let mut benchmark_report = args.benchmark.then(BenchmarkReport::default);
 
@@ -219,9 +255,14 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
         rep.localization_ms = loc_ms;
     }
 
-    // 5. Apply dilation
+    // 5. Apply dilation (scaled proportionally with resolution when auto-detecting target)
     if args.dilate > 0 {
-        mask = dilate_mask(&mask, args.dilate);
+        let eff_dilate = if args.mask.is_some() {
+            args.dilate
+        } else {
+            args.dilate.saturating_mul(res_scale)
+        };
+        mask = dilate_mask(&mask, eff_dilate);
     }
 
     // 6. Save intermediate mask if requested
@@ -239,58 +280,165 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
     }
 
     // 7. Inpainting execution across clustered local ROIs
-    let roi_masks = if args.fast {
-        compute_inpaint_roi_masks(&mask, 0, 16)
+    let mut working_img = img;
+    let mut total_blend_ms = 0u64;
+
+    if args.fast {
+        let roi_masks = compute_inpaint_roi_masks(&mask, 0, 16 * res_scale);
+        for (roi, roi_mask) in roi_masks {
+            let (crop_x, crop_y, crop_w, crop_h) = roi;
+            let crop_patch = working_img.crop_imm(crop_x, crop_y, crop_w, crop_h);
+            let inpainted_patch = inpaint_classical(&crop_patch, &roi_mask, args.steps)?;
+            let t_blend = Instant::now();
+            blend_patch_in_place(&mut working_img, &inpainted_patch, &roi_mask, roi)?;
+            total_blend_ms += t_blend.elapsed().as_millis() as u64;
+        }
     } else {
-        compute_inpaint_roi_masks(&mask, 512, 64)
-    };
-
-    let result_img = if !roi_masks.is_empty() {
-        let mut working_img = img;
-        let mut total_blend_ms = 0u64;
-
-        if args.fast {
-            for (roi, roi_mask) in roi_masks {
-                let (crop_x, crop_y, crop_w, crop_h) = roi;
-                let crop_patch = working_img.crop_imm(crop_x, crop_y, crop_w, crop_h);
-                let inpainted_patch = inpaint_classical(&crop_patch, &roi_mask, args.steps)?;
-                let t_blend = Instant::now();
-                working_img = blend_patch(&working_img, &inpainted_patch, &roi_mask, roi)?;
-                total_blend_ms += t_blend.elapsed().as_millis() as u64;
+        let batches = plan_neural_inpaint_batches(&mask, args.replace.is_none());
+        if !batches.is_empty() {
+            if let Some(ref pb) = progress {
+                pb.set_message("Loading inpainting model...");
             }
-        } else {
             let model_paths = model_mgr.ensure_models(args.model)?;
             #[cfg(feature = "nn-cpu")]
             let inpainter = CandleInpainter::load(&model_paths, args.model, &candle_dev)?;
             #[cfg(not(feature = "nn-cpu"))]
             let inpainter = CandleInpainter::load(&model_paths, args.model)?;
 
-            for (roi, roi_mask) in roi_masks {
-                let (crop_x, crop_y, crop_w, crop_h) = roi;
-                let crop_patch = working_img.crop_imm(crop_x, crop_y, crop_w, crop_h);
-                let inpainted_patch = inpainter.inpaint(
-                    &crop_patch,
-                    &roi_mask,
-                    args.replace.as_deref(),
-                    args.steps,
-                    benchmark_report.as_mut(),
-                )?;
-                let t_blend = Instant::now();
-                working_img = blend_patch(&working_img, &inpainted_patch, &roi_mask, roi)?;
-                total_blend_ms += t_blend.elapsed().as_millis() as u64;
+            let eff_steps = if args.steps == 0 {
+                args.model.default_steps()
+            } else {
+                args.steps
+            };
+            let total_passes = batches.len();
+            if let Some(ref pb) = progress {
+                pb.set_length((total_passes * eff_steps) as u64);
+                pb.set_position(0);
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template(
+                            "{spinner:.green} [{elapsed_precise}] [{bar:28.cyan/blue}] {pos}/{len} {msg}",
+                        )
+                        .unwrap()
+                        .progress_chars("=>-"),
+                );
+            }
+
+            const QUAD: u32 = 256;
+            const OFFSETS: [(u32, u32); 4] = [(0, 0), (QUAD, 0), (0, QUAD), (QUAD, QUAD)];
+
+            for (pass_idx, batch) in batches.into_iter().enumerate() {
+                if let Some(ref pb) = progress {
+                    pb.set_message(format!(
+                        "Inpainting pass {}/{} on {}...",
+                        pass_idx + 1,
+                        total_passes,
+                        dev_name
+                    ));
+                }
+
+                match batch {
+                    InpaintBatch::Single((roi, roi_mask)) => {
+                        let (crop_x, crop_y, crop_w, crop_h) = roi;
+                        let mut crop_rgb = working_img
+                            .crop_imm(crop_x, crop_y, crop_w, crop_h)
+                            .to_rgb8();
+                        scrub_foreign_masked_pixels(
+                            &mut crop_rgb,
+                            &mask,
+                            &roi_mask,
+                            crop_x,
+                            crop_y,
+                        );
+                        let inpainted_patch = inpainter.inpaint_with_progress(
+                            &DynamicImage::ImageRgb8(crop_rgb),
+                            &roi_mask,
+                            args.replace.as_deref(),
+                            args.steps,
+                            benchmark_report.as_mut(),
+                            progress.as_ref(),
+                        )?;
+                        let t_blend = Instant::now();
+                        blend_patch_in_place(&mut working_img, &inpainted_patch, &roi_mask, roi)?;
+                        total_blend_ms += t_blend.elapsed().as_millis() as u64;
+                    }
+                    InpaintBatch::Quadrants(rois) => {
+                        let mut atlas_img =
+                            image::RgbImage::from_pixel(512, 512, image::Rgb([128, 128, 128]));
+                        let mut atlas_mask = GrayImage::new(512, 512);
+
+                        for (idx, &((crop_x, crop_y, crop_w, crop_h), ref roi_mask)) in
+                            rois.iter().enumerate()
+                        {
+                            let (ox, oy) = OFFSETS[idx];
+                            let mut crop_rgb = working_img
+                                .crop_imm(crop_x, crop_y, crop_w, crop_h)
+                                .to_rgb8();
+                            scrub_foreign_masked_pixels(
+                                &mut crop_rgb,
+                                &mask,
+                                roi_mask,
+                                crop_x,
+                                crop_y,
+                            );
+                            let tile_rgb = if (crop_w, crop_h) == (QUAD, QUAD) {
+                                crop_rgb
+                            } else {
+                                imageops::resize(
+                                    &crop_rgb,
+                                    QUAD,
+                                    QUAD,
+                                    imageops::FilterType::Lanczos3,
+                                )
+                            };
+                            let tile_mask = if (crop_w, crop_h) == (QUAD, QUAD) {
+                                roi_mask.clone()
+                            } else {
+                                imageops::resize(
+                                    roi_mask,
+                                    QUAD,
+                                    QUAD,
+                                    imageops::FilterType::Triangle,
+                                )
+                            };
+                            imageops::replace(&mut atlas_img, &tile_rgb, ox as i64, oy as i64);
+                            imageops::replace(&mut atlas_mask, &tile_mask, ox as i64, oy as i64);
+                        }
+
+                        let inpainted_atlas = inpainter.inpaint_with_progress(
+                            &DynamicImage::ImageRgb8(atlas_img),
+                            &atlas_mask,
+                            None,
+                            args.steps,
+                            benchmark_report.as_mut(),
+                            progress.as_ref(),
+                        )?;
+
+                        for (idx, (roi, roi_mask)) in rois.into_iter().enumerate() {
+                            let (ox, oy) = OFFSETS[idx];
+                            let (_, _, crop_w, crop_h) = roi;
+                            let quad_out = inpainted_atlas.crop_imm(ox, oy, QUAD, QUAD);
+                            let patch_out = if (crop_w, crop_h) == (QUAD, QUAD) {
+                                quad_out
+                            } else {
+                                quad_out.resize_exact(
+                                    crop_w,
+                                    crop_h,
+                                    imageops::FilterType::Lanczos3,
+                                )
+                            };
+                            let t_blend = Instant::now();
+                            blend_patch_in_place(&mut working_img, &patch_out, &roi_mask, roi)?;
+                            total_blend_ms += t_blend.elapsed().as_millis() as u64;
+                        }
+                    }
+                }
             }
         }
-
-        if let Some(ref mut rep) = benchmark_report {
-            rep.alpha_blend_ms = total_blend_ms;
-        }
-
-        working_img
-    } else {
-        img
-    };
+    }
 
     if let Some(ref mut rep) = benchmark_report {
+        rep.alpha_blend_ms = total_blend_ms;
         rep.total_ms = rep.localization_ms
             + rep.vae_encode_ms
             + rep.denoise_ms
@@ -298,10 +446,18 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
             + rep.alpha_blend_ms;
     }
 
+    if let Some(ref pb) = progress {
+        pb.set_message("Saving output image...");
+    }
+
     // 8. Save output
-    result_img
+    working_img
         .save(&output_path)
         .map_err(|e| MartiniError::Io(std::io::Error::other(e)))?;
+
+    if let Some(pb) = progress {
+        pb.finish_and_clear();
+    }
 
     // 9. Output status & benchmark reports
     if let (Some(rep), false) = (&benchmark_report, args.json) {
@@ -322,7 +478,10 @@ pub fn run_erase(args: &EraseArgs) -> Result<(), MartiniError> {
         });
         println!("{}", serde_json::to_string_pretty(&json_meta).unwrap());
     } else {
-        println!("✨ Object erasure complete!");
+        println!(
+            "✨ Object erasure complete! ({:.1}s)",
+            t_run_start.elapsed().as_secs_f64()
+        );
         println!("📄 Output saved to: {}", output_path.display());
     }
 

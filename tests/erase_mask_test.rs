@@ -181,3 +181,85 @@ fn test_compute_inpaint_rois_splits_scattered_regions() {
         assert!(rw < 160 && rh < 100);
     }
 }
+
+#[test]
+fn test_detect_text_high_resolution_thick_strokes() {
+    // High-resolution 2400x1800 canvas (simulating 4K/12MP product photography)
+    // with a 20px-wide neutral black digit stroke (> 10px old morphological limit)
+    // alongside chromatic dark green leaves separated by a 12px bright cloth gap.
+    let mut img = image::RgbImage::from_pixel(2400, 1800, image::Rgb([218, 218, 215]));
+
+    // Chromatic dark green leaves with a 12px cloth gap at y = 720..732
+    for y in 690..720 {
+        for x in 400..850 {
+            img.put_pixel(x, y, image::Rgb([26, 56, 24]));
+        }
+    }
+    for y in 732..762 {
+        for x in 400..850 {
+            img.put_pixel(x, y, image::Rgb([26, 56, 24]));
+        }
+    }
+
+    // Thick 20px-wide neutral black digit stroke at x = 1500..1520, y = 1200..1310
+    for y in 1200..1310 {
+        for x in 1500..1520 {
+            img.put_pixel(x, y, image::Rgb([14, 14, 14]));
+        }
+    }
+
+    // Thin 4px-wide neutral black hairline stroke at x = 1520..1560, y = 1270..1274
+    for y in 1270..1274 {
+        for x in 1520..1560 {
+            img.put_pixel(x, y, image::Rgb([16, 16, 16]));
+        }
+    }
+
+    let dyn_img = image::DynamicImage::ImageRgb8(img);
+    let mask = martini::erase::mask::detect_text_mask(&dyn_img, 0.35);
+
+    // Both thick 20px vertical stem and thin 4px crossbar must be detected
+    assert_eq!(mask.get_pixel(1510, 1255)[0], 255);
+    assert_eq!(mask.get_pixel(1540, 1272)[0], 255);
+
+    // Chromatic green leaves and the cloth gap between them must remain 0
+    assert_eq!(mask.get_pixel(600, 705)[0], 0);
+    assert_eq!(mask.get_pixel(600, 726)[0], 0);
+    assert_eq!(mask.get_pixel(600, 745)[0], 0);
+}
+
+#[test]
+fn test_plan_neural_inpaint_batches_packs_4k_scattered_labels() {
+    use martini::erase::mask::{InpaintBatch, plan_neural_inpaint_batches};
+
+    // Simulate 7 scattered text labels on a 4032x3024 image (like 01..06 + top-right caption)
+    let mut mask = GrayImage::new(4032, 3024);
+    let boxes = [
+        (685, 1210, 150, 115),
+        (1625, 1210, 150, 115),
+        (2635, 1210, 150, 115),
+        (525, 2600, 140, 115),
+        (1845, 2600, 150, 115),
+        (3165, 2600, 150, 115),
+        (3470, 230, 380, 130),
+    ];
+    for (bx, by, bw, bh) in boxes {
+        for y in by..(by + bh) {
+            for x in bx..(bx + bw) {
+                mask.put_pixel(x, y, Luma([255]));
+            }
+        }
+    }
+
+    let batches = plan_neural_inpaint_batches(&mask, true);
+    // 7 scattered labels pack into just 2 diffusion passes (4 + 3 quadrants) instead of 7+ passes
+    assert_eq!(batches.len(), 2);
+    let total_packed: usize = batches
+        .iter()
+        .map(|b| match b {
+            InpaintBatch::Quadrants(q) => q.len(),
+            InpaintBatch::Single(_) => 1,
+        })
+        .sum();
+    assert_eq!(total_packed, 7);
+}

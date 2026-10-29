@@ -24,6 +24,21 @@ pub fn resolve_device_target(target: &str) -> Result<DeviceTarget, MartiniError>
     }
 }
 
+#[cfg(feature = "cuda")]
+fn configure_cuda_device(dev: Device) -> (Device, String) {
+    candle_core::cuda_backend::set_gemm_reduced_precision_f16(true);
+    candle_core::cuda_backend::set_gemm_reduced_precision_bf16(true);
+    candle_core::cuda_backend::set_gemm_reduced_precision_f32(true);
+
+    let label = dev
+        .as_cuda_device()
+        .ok()
+        .and_then(|c| c.cuda_stream().context().name().ok())
+        .map(|name| format!("CUDA (GPU 0: {})", name.trim()))
+        .unwrap_or_else(|| "CUDA (GPU 0)".to_string());
+    (dev, label)
+}
+
 #[cfg(feature = "nn-cpu")]
 pub fn select_candle_device(target: DeviceTarget) -> (Device, String) {
     match target {
@@ -32,7 +47,7 @@ pub fn select_candle_device(target: DeviceTarget) -> (Device, String) {
             #[cfg(feature = "cuda")]
             {
                 match Device::new_cuda(0) {
-                    Ok(dev) => (dev, "CUDA (GPU 0)".to_string()),
+                    Ok(dev) => configure_cuda_device(dev),
                     Err(e) => {
                         tracing::warn!(
                             "CUDA requested but unavailable ({}), falling back to CPU",
@@ -54,7 +69,7 @@ pub fn select_candle_device(target: DeviceTarget) -> (Device, String) {
             #[cfg(feature = "cuda")]
             {
                 if let Ok(dev) = Device::new_cuda(0) {
-                    return (dev, "CUDA (GPU 0)".to_string());
+                    return configure_cuda_device(dev);
                 }
             }
             (Device::Cpu, "CPU".to_string())
