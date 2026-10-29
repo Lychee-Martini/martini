@@ -3,6 +3,7 @@ use crate::error::MartiniError;
 
 pub mod font;
 pub mod ir;
+pub mod writer;
 
 pub fn convert_pdf_to_pptx(
     _input_data: &[u8],
