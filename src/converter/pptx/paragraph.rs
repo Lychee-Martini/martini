@@ -81,6 +81,14 @@ pub fn cluster_paragraphs(text_items: Vec<RawTextItem>) -> Vec<TextBox> {
                     || item.rect.x + item.rect.w < cluster.rect.x - 120_000);
 
                 if left_diff < 120_000 || horizontal_overlap || same_line {
+                    if same_line
+                        && item.rect.x > cluster.rect.x + cluster.rect.w + 5_000
+                        && let Some(last_run) = cluster.runs.last_mut()
+                        && !last_run.text.ends_with(' ')
+                        && !run.text.starts_with(' ')
+                    {
+                        last_run.text.push(' ');
+                    }
                     cluster.rect = cluster.rect.union(&item.rect);
                     cluster.last_y = item.rect.y;
                     cluster.last_h = item.rect.h;
